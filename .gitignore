@@ -1,0 +1,15 @@
+# Ignore all files
+*
+
+# Unignore all files with an extension
+!*.*
+
+# Ignore the VS Code file
+.vscode/
+
+# Ignore certain directories
+aesprite/
+include/
+lib/
+
+.DS_Store
