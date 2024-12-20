@@ -6,17 +6,12 @@ Game 0 will be a galaga style 2D game with select color pallets. Visuals will be
 
 ## Requirements
 
-[ ] Single Player
-
-[ ] Limit of 5 color pallets
-
-[ ] Score based on enemy kills
-
-[ ] Score multipliers based on enemies and frequency
-
-[ ] Sound Fx's
-
-[ ] Save system for logging high score
+- [ ] Single Player
+- [ ] Limit of 5 color pallets
+- [ ] Score based on enemy kills
+- [ ] Score multipliers based on enemies and frequency
+- [ ] Sound Fx's
+- [ ] Save system for logging high score
 
 ## Design
 
