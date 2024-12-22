@@ -186,7 +186,7 @@ public:
 // GLOBALS
 const int WIDTH = 960, HEIGHT = 720, FRAME_RATE = 60;
 const float SPEED = 300;
-const Vector2Int MAIN_FRAME_ORIGIN, MAIN_FRAME_SIZE = Vector2Int(720, 720);
+const Vector2Int MAIN_FRAME_ORIGIN = Vector2Int(8, 8), MAIN_FRAME_SIZE = Vector2Int(720, 704);
 SDL_General GLOBAL_GEN;
 
 // -----------------------------------------------------------------------------
@@ -276,7 +276,7 @@ class Ship : public Object{
         pos.x += vel.x * deltaTime;
 
         // Collision Detections
-        if (pos.x <= MAIN_FRAME_ORIGIN.x) pos.x = 0;
+        if (pos.x <= MAIN_FRAME_ORIGIN.x) pos.x = MAIN_FRAME_ORIGIN.x;
         if (pos.x >= (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w) pos.x = 
             (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w;
 
