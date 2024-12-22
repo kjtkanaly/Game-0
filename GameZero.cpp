@@ -1,4 +1,5 @@
 #include <iostream>
+#include <vector>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_image.h>
@@ -13,7 +14,7 @@ struct Vector2
     float x;
     float y;
 
-    Vector2(float inX, float inY):
+    Vector2(float inX = 0, float inY = 0):
         x(0),
         y(0)
     {
@@ -21,6 +22,21 @@ struct Vector2
         y = inY;
     }
 };
+
+struct Vector2Int
+{
+    int x;
+    int y;
+
+    Vector2Int(int inX = 0, int inY = 0):
+        x(0),
+        y(0)
+    {
+        x = inX;
+        y = inY;
+    }
+};
+
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
@@ -30,6 +46,7 @@ class SDL_General
 public:
     SDL_Window* window;
     SDL_Renderer* rend;
+    vector<SDL_Event> events;
 
     SDL_General():
         window(NULL),
@@ -169,11 +186,13 @@ public:
 // GLOBALS
 const int WIDTH = 960, HEIGHT = 720, FRAME_RATE = 60;
 const float SPEED = 300;
+const Vector2Int MAIN_FRAME_ORIGIN, MAIN_FRAME_SIZE = Vector2Int(720, 720);
 SDL_General GLOBAL_GEN;
+
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
-// Game Object
+// Game Objects
 class Object : public SDL_Rect{
     public:
     SDL_Texture* tex;
@@ -194,11 +213,87 @@ class Object : public SDL_Rect{
         }
     }
 
-    void Process(const float& deltaTime)
-    {
-        
-    }
+    virtual void Process(const float& deltaTime) {}
 };
+
+class Ship : public Object{
+
+    public:
+    Ship(
+        const Vector2& inPos = Vector2(0, 0),
+        const char* spriteFile = NULL)
+        : Object(inPos, spriteFile)
+    {
+        pos.x = (float) x;
+    }
+
+    void Process(const float& deltaTime) override
+    {
+        // Check for the user input
+        SDL_Event event;
+        for (int i = 0; i < GLOBAL_GEN.events.size(); i++) 
+        {
+            event = GLOBAL_GEN.events[i];
+            switch (event.type) {
+                case SDL_KEYDOWN:
+                    switch (event.key.keysym.scancode) {
+                        case SDL_SCANCODE_RIGHT:
+                        case SDL_SCANCODE_D:
+                            right = 1;
+                            break;
+                        case SDL_SCANCODE_LEFT:
+                        case SDL_SCANCODE_A:
+                            left = 1;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case SDL_KEYUP:
+                    switch (event.key.keysym.scancode) {
+                        case SDL_SCANCODE_RIGHT:
+                        case SDL_SCANCODE_D:
+                            right = 0;
+                            break;
+                        case SDL_SCANCODE_LEFT:
+                        case SDL_SCANCODE_A:
+                            left = 0;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+            }
+        }
+
+        // Do stuff depending on the user's selections
+        // Determine the Velocity
+        vel.x = 0;
+        if (right && !left) vel.x = SPEED;
+        if (left && !right) vel.x = -SPEED;
+
+        // Update the position
+        pos.x += vel.x * deltaTime;
+
+        // Collision Detections
+        if (pos.x <= MAIN_FRAME_ORIGIN.x) pos.x = 0;
+        if (pos.x >= (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w) pos.x = 
+            (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w;
+
+        // Set the Positions of the dest
+        x = (int) pos.x;
+    }
+
+    private:
+    // For keep track of the keyboard inputs
+    int right;
+    int left;
+    // The float position
+    Vector2 pos;
+    // The X Velocity
+    Vector2 vel;
+};
+
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
@@ -221,7 +316,7 @@ int main()
     GLOBAL_GEN.CreateRenderer(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
     // Create the ship object
-    Object ship = Object(Vector2(312, 595), "resources/ship-01.png");
+    Ship ship = Ship(Vector2(312, 595), "resources/ship-01.png");
     ship.w *= 3;
     ship.h *= 3;
 
@@ -233,15 +328,26 @@ int main()
     {
         float deltaTime = 1 / ((float) FRAME_RATE);
 
+        // Kind of need to store a list of the events each frame
+
+        // Then step through all of the game objects' process
+
         // Process Events
         SDL_Event event;
+        GLOBAL_GEN.events.clear();
         while (SDL_PollEvent(&event)) {
+            // Append the events list
+            GLOBAL_GEN.events.push_back(event);
+
             switch (event.type) {
                 case SDL_QUIT:
                     closeRequested = 1;
                     break;
             }
         }
+
+        // Process our game objects events
+        ship.Process(deltaTime);
 
         // Clear the Window by setting it black
         SDL_RenderClear(GLOBAL_GEN.rend);
