@@ -315,6 +315,9 @@ int main()
     // Create the renderer for the game window
     GLOBAL_GEN.CreateRenderer(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
+    // Create the Background object
+    Object background = Object(Vector2(0, 0), "resources/main-game-bckg.png");
+
     // Create the ship object
     Ship ship = Ship(Vector2(312, 595), "resources/ship-01.png");
     ship.w *= 3;
@@ -353,6 +356,7 @@ int main()
         SDL_RenderClear(GLOBAL_GEN.rend);
 
         // Draw the ship to the render window
+        SDL_RenderCopy(GLOBAL_GEN.rend, background.tex, NULL, &background);
         SDL_RenderCopy(GLOBAL_GEN.rend, ship.tex, NULL, &ship);
 
         // Swaps the render from the back buffer to the front
