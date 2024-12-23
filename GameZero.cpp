@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <map>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_image.h>
@@ -185,7 +186,6 @@ public:
 // -----------------------------------------------------------------------------
 // GLOBALS
 const int WIDTH = 960, HEIGHT = 720, FRAME_RATE = 60;
-const float SPEED = 300;
 const Vector2Int MAIN_FRAME_ORIGIN = Vector2Int(8, 8), MAIN_FRAME_SIZE = Vector2Int(720, 704);
 SDL_General GLOBAL_GEN;
 
@@ -193,13 +193,16 @@ SDL_General GLOBAL_GEN;
 
 // -----------------------------------------------------------------------------
 // Game Objects
-class Object : public SDL_Rect{
+class GameObject : public SDL_Rect{
     public:
+    std::string name;
     SDL_Texture* tex;
+    std::vector<GameObject*> children;
 
-    Object(
-        const Vector2& inPos = Vector2(0, 0),
-        const char* spriteFile = NULL)
+    GameObject(const Vector2& inPos = Vector2(0, 0),
+               const char* spriteFile = NULL) :
+        children()
+
     {
         x = inPos.x;
         y = inPos.y;
@@ -213,21 +216,61 @@ class Object : public SDL_Rect{
         }
     }
 
-    virtual void Process(const float& deltaTime) {}
+    virtual int Process(const float& deltaTime) { return 0; }
+
+    virtual void Destroy() 
+    {
+        delete this;
+    }
 };
 
-class Ship : public Object{
+class Laser : public GameObject {
+    public:
+    Laser(
+        const Vector2& inPos = Vector2(0, 0),
+        const char* spriteFile = NULL)
+        : GameObject(inPos, spriteFile)
+    {
+        pos.x = (float) x;
+        pos.y = (float) y;
+    }
+
+    int Process(const float& deltaTime) override
+    {
+        // Update the Up Time
+        upTime += deltaTime;
+        if (upTime >= maxTime) {
+            return 1;
+        }
+
+        // Update the position
+        pos.y -= speed * deltaTime;
+
+        // Set the position of the dest
+        y = (int) pos.y;
+
+        return 0;
+    }
+
+    private:
+    Vector2 pos;
+    float speed = 600;
+    float upTime = 0;
+    float maxTime = 2.0f;
+};
+
+class Ship : public GameObject{
 
     public:
     Ship(
         const Vector2& inPos = Vector2(0, 0),
         const char* spriteFile = NULL)
-        : Object(inPos, spriteFile)
+        : GameObject(inPos, spriteFile)
     {
         pos.x = (float) x;
     }
 
-    void Process(const float& deltaTime) override
+    int Process(const float& deltaTime) override
     {
         // Check for the user input
         SDL_Event event;
@@ -244,6 +287,9 @@ class Ship : public Object{
                         case SDL_SCANCODE_LEFT:
                         case SDL_SCANCODE_A:
                             left = 1;
+                            break;
+                        case SDL_SCANCODE_SPACE:
+                            ShootLaser();
                             break;
                         default:
                             break;
@@ -269,8 +315,8 @@ class Ship : public Object{
         // Do stuff depending on the user's selections
         // Determine the Velocity
         vel.x = 0;
-        if (right && !left) vel.x = SPEED;
-        if (left && !right) vel.x = -SPEED;
+        if (right && !left) vel.x = speed;
+        if (left && !right) vel.x = -speed;
 
         // Update the position
         pos.x += vel.x * deltaTime;
@@ -282,19 +328,68 @@ class Ship : public Object{
 
         // Set the Positions of the dest
         x = (int) pos.x;
+
+        return 0;
+    }
+
+    void ShootLaser()
+    {
+        // Spawn a laser bolt
+        Laser* laser = new Laser(Vector2(x, y), "resources/laser-01.png");
+        laser->name = "laser";
+        laser->w *= 3;
+        laser->h *= 3;
+        children.push_back(laser);
     }
 
     private:
     // For keep track of the keyboard inputs
-    int right;
-    int left;
+    int right = 0;
+    int left = 0;
+    
     // The float position
     Vector2 pos;
+    
     // The X Velocity
     Vector2 vel;
+    
+    // The ship movement speed
+    float speed = 300;
 };
 
 // -----------------------------------------------------------------------------
+void RenderGameObjects(GameObject* node) 
+{
+    // Dig down the root's children
+    for (int i = 0; i < node->children.size(); i++) 
+    {
+        RenderGameObjects(node->children[i]);
+    }
+
+    // Render the node
+    SDL_RenderCopy(
+        GLOBAL_GEN.rend, 
+        node->tex, 
+        NULL, 
+        node);
+}
+
+int ProcessObjectTree(GameObject* node, float delta)
+{
+    // Dig down the root's children
+    for (int i = node->children.size() - 1; i >= 0; i--) 
+    {
+        if (ProcessObjectTree(node->children[i], delta))
+        {
+            std::cout << "Delete object" << std::endl;
+            node->children[i]->Destroy();
+            node->children.erase(node->children.begin() + i);
+        }
+    }
+
+    // Render the node
+    return node->Process(delta);
+}
 
 // -----------------------------------------------------------------------------
 // MAIN
@@ -315,13 +410,25 @@ int main()
     // Create the renderer for the game window
     GLOBAL_GEN.CreateRenderer(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
+    // Create the scene tree list
+    GameObject sceneTree;
+    sceneTree.name = "Tree";
+
     // Create the Background object
-    Object background = Object(Vector2(0, 0), "resources/main-game-bckg.png");
+    GameObject background = GameObject(
+        Vector2(0, 0), 
+        "resources/main-game-bckg.png");
+    background.name = "Background";
+    sceneTree.children.push_back(&background);
 
     // Create the ship object
-    Ship ship = Ship(Vector2(312, 595), "resources/ship-01.png");
+    Ship ship = Ship(
+        Vector2(312, 595), 
+        "resources/ship-01.png");
+    ship.name = "Ship";
     ship.w *= 3;
     ship.h *= 3;
+    sceneTree.children.push_back(&ship);
 
     // Set to 1 when close window button pressed
     int closeRequested = 0;
@@ -350,14 +457,13 @@ int main()
         }
 
         // Process our game objects events
-        ship.Process(deltaTime);
+        ProcessObjectTree(&sceneTree, deltaTime);
 
         // Clear the Window by setting it black
         SDL_RenderClear(GLOBAL_GEN.rend);
 
         // Draw the ship to the render window
-        SDL_RenderCopy(GLOBAL_GEN.rend, background.tex, NULL, &background);
-        SDL_RenderCopy(GLOBAL_GEN.rend, ship.tex, NULL, &ship);
+        RenderGameObjects(&sceneTree);
 
         // Swaps the render from the back buffer to the front
         SDL_RenderPresent(GLOBAL_GEN.rend);

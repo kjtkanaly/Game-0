@@ -1,0 +1,6 @@
+[X] Init project
+[X] Get ship movement working
+[X] Get ship laser spawning working
+[ ] Init enemy grid
+[ ] Get enemy spawning working
+[ ] Get enemy death working
