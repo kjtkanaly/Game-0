@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <cmath>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_image.h>
@@ -48,19 +49,29 @@ public:
     SDL_Window* window;
     SDL_Renderer* rend;
     vector<SDL_Event> events;
+    std::vector<int> colSpace;
 
     SDL_General():
         window(NULL),
         rend(NULL)
     {}
 
-    void Init()
+    void Init(const int& colCount, const int& colSize, const int& windowOffset)
     {   
         // Init the SDL/Error catch
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) 
         { 
             std::cerr << "Error with Init: " << SDL_GetError() << std::endl; 
         }
+
+    // Make the col space array
+    for (int i = 0; i < colCount; i++) 
+    {
+        colSpace.push_back(i * colSize + windowOffset);
+        std::cout << "Grid Element: " 
+                  << std::to_string(i * colSize + windowOffset)
+                  << std::endl;
+    }
 
         std::cout << "Init successful!!!" 
                   << std::endl;
@@ -186,7 +197,10 @@ public:
 // -----------------------------------------------------------------------------
 // GLOBALS
 const int WIDTH = 960, HEIGHT = 720, FRAME_RATE = 60;
-const Vector2Int MAIN_FRAME_ORIGIN = Vector2Int(8, 8), MAIN_FRAME_SIZE = Vector2Int(720, 704);
+const Vector2Int MAIN_FRAME_ORIGIN = Vector2Int(8, 8), 
+                 MAIN_FRAME_SIZE = Vector2Int(720, 704),
+                 GRID_DIM = Vector2Int(8, 6), 
+                 GRID_ELEM_SIZE = Vector2Int(90, 90);
 SDL_General GLOBAL_GEN;
 
 // -----------------------------------------------------------------------------
@@ -267,11 +281,16 @@ class Ship : public GameObject{
         const char* spriteFile = NULL)
         : GameObject(inPos, spriteFile)
     {
-        pos.x = (float) x;
+        float startPos = (float) x;
+        float targetPos = startPos;
+
+        timerTimeLeft = timerTotalTime;
     }
 
     int Process(const float& deltaTime) override
     {
+        // Grid movement
+
         // Check for the user input
         SDL_Event event;
         for (int i = 0; i < GLOBAL_GEN.events.size(); i++) 
@@ -282,11 +301,11 @@ class Ship : public GameObject{
                     switch (event.key.keysym.scancode) {
                         case SDL_SCANCODE_RIGHT:
                         case SDL_SCANCODE_D:
-                            right = 1;
+                            UpdateTargetPos(1);
                             break;
                         case SDL_SCANCODE_LEFT:
                         case SDL_SCANCODE_A:
-                            left = 1;
+                            UpdateTargetPos(-1);
                             break;
                         case SDL_SCANCODE_SPACE:
                             ShootLaser();
@@ -295,41 +314,74 @@ class Ship : public GameObject{
                             break;
                     }
                     break;
-                case SDL_KEYUP:
-                    switch (event.key.keysym.scancode) {
-                        case SDL_SCANCODE_RIGHT:
-                        case SDL_SCANCODE_D:
-                            right = 0;
-                            break;
-                        case SDL_SCANCODE_LEFT:
-                        case SDL_SCANCODE_A:
-                            left = 0;
-                            break;
-                        default:
-                            break;
-                    }
-                    break;
             }
         }
 
-        // Do stuff depending on the user's selections
-        // Determine the Velocity
-        vel.x = 0;
-        if (right && !left) vel.x = speed;
-        if (left && !right) vel.x = -speed;
-
-        // Update the position
-        pos.x += vel.x * deltaTime;
-
-        // Collision Detections
-        if (pos.x <= MAIN_FRAME_ORIGIN.x) pos.x = MAIN_FRAME_ORIGIN.x;
-        if (pos.x >= (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w) pos.x = 
-            (MAIN_FRAME_ORIGIN.x + MAIN_FRAME_SIZE.x) - w;
-
-        // Set the Positions of the dest
-        x = (int) pos.x;
-
+        NewTranslateToPos(deltaTime);
+        
         return 0;
+    }
+
+    void UpdateTargetPos(int increment) 
+    {
+        // Check if the target is still translating
+        if (timerTimeLeft < timerTotalTime) return;
+
+        // Check for bounds
+        if (targetIndex + increment < 0) return;
+        if (targetIndex + increment >= (int) GLOBAL_GEN.colSpace.size()) return;
+
+        // Set the target and start positions
+        targetIndex += increment;
+        targetPos = (float) GLOBAL_GEN.colSpace[targetIndex];
+        startPos = (float) x;
+
+        // Reset the timer clock
+        timerTimeLeft = 0;  // Reset the timer
+
+        // std::cout << "Target Index: " << std::to_string(targetIndex) << std::endl;
+    }
+
+    float easeInOutSine(float x) 
+    {
+        float pi = 3.14;
+        return -(cos(pi * x) - 1) / 2;
+    }
+
+    float easeOutElastic(float x) 
+    {
+        const float pi = 3.14;
+        const double c4 = (2 * M_PI) / 3;
+
+        if (x == 0) {
+            return 0;
+        } else if (x == 1) {
+            return 1;
+        } else {
+            return pow(2, -10 * x) * sin((x * 10 - 0.75) * c4) + 1;
+        }
+    }
+
+    float easeOutBack(float x)
+    {
+        const float c1 = 1.70158;
+        const float c3 = c1 + 1;
+
+        return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2);
+    }
+
+    void NewTranslateToPos(float deltaTime)
+    {
+        timerTimeLeft += deltaTime;
+
+        if (timerTimeLeft >= timerTotalTime) return;
+
+        float ease = easeOutBack(timerTimeLeft / timerTotalTime);
+        float newPos = (targetPos - startPos) * ease + startPos;
+
+        // std::cout << "Ease: " << std::to_string(newPos) << std::endl;
+
+        x = (int) newPos;
     }
 
     void ShootLaser()
@@ -343,18 +395,11 @@ class Ship : public GameObject{
     }
 
     private:
-    // For keep track of the keyboard inputs
-    int right = 0;
-    int left = 0;
-    
-    // The float position
-    Vector2 pos;
-    
-    // The X Velocity
-    Vector2 vel;
-    
-    // The ship movement speed
-    float speed = 300;
+    int targetIndex = 3;
+    float timerTimeLeft = 0;
+    float timerTotalTime = 0.2;
+    float startPos;
+    float targetPos;
 };
 
 // -----------------------------------------------------------------------------
@@ -396,7 +441,7 @@ int ProcessObjectTree(GameObject* node, float delta)
 int main() 
 {
     // Init the SDL enviroment
-    GLOBAL_GEN.Init();
+    GLOBAL_GEN.Init(GRID_DIM.x, GRID_ELEM_SIZE.x, MAIN_FRAME_ORIGIN.x);
 
     // Create the game Window
     GLOBAL_GEN.CreateWindow(
@@ -423,7 +468,7 @@ int main()
 
     // Create the ship object
     Ship ship = Ship(
-        Vector2(312, 595), 
+        Vector2(GLOBAL_GEN.colSpace[3], 595), 
         "resources/ship-01.png");
     ship.name = "Ship";
     ship.w *= 3;
@@ -437,10 +482,6 @@ int main()
     while (!closeRequested) 
     {
         float deltaTime = 1 / ((float) FRAME_RATE);
-
-        // Kind of need to store a list of the events each frame
-
-        // Then step through all of the game objects' process
 
         // Process Events
         SDL_Event event;

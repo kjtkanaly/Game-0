@@ -1,6 +1,9 @@
 [X] Init project
 [X] Get ship movement working
 [X] Get ship laser spawning working
-[ ] Init enemy grid
+[X] Change the ship movement logic to use ease logic
+[X] Init enemy grid
 [ ] Get enemy spawning working
 [ ] Get enemy death working
+
+    
