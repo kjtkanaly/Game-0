@@ -50,6 +50,7 @@ public:
     SDL_Renderer* rend;
     vector<SDL_Event> events;
     std::vector<int> colSpace;
+    std::vector<SDL_Rect*> projectiles;
 
     SDL_General():
         window(NULL),
@@ -273,7 +274,59 @@ class Laser : public GameObject {
     float maxTime = 2.0f;
 };
 
-class Ship : public GameObject{
+class Alien : public GameObject
+{
+    public:
+    Alien(
+        const Vector2& inPos = Vector2(0, 0),
+        const char* spriteFile = NULL)
+        : GameObject(inPos, spriteFile)
+    {}
+
+    int Process(const float& deltaTime) override
+    {
+        // Check if the alien is being hit by a projectile
+        if (IsHit()) TakeDamage();
+
+        // Check if the alien is dead
+        if (health <= 0) return 1;
+
+        return 0;
+    }
+
+    private:
+    bool IsHit()
+    {
+        // Loop over the projectiles
+        for (int i = 0; i < GLOBAL_GEN.projectiles.size(); i++) {
+            if (SDL_HasIntersection(this, GLOBAL_GEN.projectiles[i])
+                && colliders.find(GLOBAL_GEN.projectiles[i]) == colliders.end())
+            {
+                // colliders.push_back(GLOBAL_GEN.projectiles[i]);
+                colliders[GLOBAL_GEN.projectiles[i]] = 1;
+                return true;
+            }
+        }
+
+        // No hits
+        return false;
+    }
+
+    void TakeDamage()
+    {
+        std::cout << "Alien takes damage!" << std::endl;
+
+        // Tick the health 
+        health -= 1;
+    }
+
+    // Props
+    std::map<SDL_Rect*, int> colliders; 
+    int health = 2;
+};
+
+class Ship : public GameObject
+{
 
     public:
     Ship(
@@ -392,6 +445,9 @@ class Ship : public GameObject{
         laser->w *= 3;
         laser->h *= 3;
         children.push_back(laser);
+
+        // Add the laser bolt to the project list
+        GLOBAL_GEN.projectiles.push_back(laser);
     }
 
     private:
@@ -474,6 +530,15 @@ int main()
     ship.w *= 3;
     ship.h *= 3;
     sceneTree.children.push_back(&ship);
+
+    // Create the test alien
+    Alien* alien = new Alien(
+        Vector2(GLOBAL_GEN.colSpace[3], 8),
+        "resources/enemy-01.png");
+    alien->name = "Alien";
+    alien->w *= 3;
+    alien->h *= 3;
+    sceneTree.children.push_back(alien);
 
     // Set to 1 when close window button pressed
     int closeRequested = 0;
