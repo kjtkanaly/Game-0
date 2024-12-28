@@ -51,6 +51,7 @@ struct Grid
     Vector2Int dim;
     Vector2Int elemSize;
     std::vector<int> colPos;
+    std::vector<int> rowPos;
 
     void MakeColPosArray()
     {
@@ -58,8 +59,20 @@ struct Grid
         for (int i = 0; i < dim.x; i++) 
         {
             colPos.push_back(i * elemSize.x + origin.x);
-            std::cout << "Grid Element: " 
+            std::cout << "Col Element: " 
                     << std::to_string(i * elemSize.x + origin.x)
+                    << std::endl;
+        }
+    }
+
+    void MakeRowPosArray()
+    {
+        // Make the col pos array
+        for (int i = 0; i < dim.y; i++) 
+        {
+            rowPos.push_back(i * elemSize.y + origin.y);
+            std::cout << "Row Element: " 
+                    << std::to_string(i * elemSize.y + origin.y)
                     << std::endl;
         }
     }
@@ -231,6 +244,7 @@ class Scene
         mainGrid.dim = Vector2Int(8, 6);
         mainGrid.elemSize = Vector2Int(90, 90);
         mainGrid.MakeColPosArray();
+        mainGrid.MakeRowPosArray();
     }
 };
 
@@ -373,6 +387,55 @@ class Alien : public GameObject
 
     // Props
     int health = 2;
+};
+
+class EnemySpawner : public GameObject
+{
+    public:
+    EnemySpawner(const Vector2Int& inPos = Vector2Int(0, 0),
+                 const char* spriteFile = NULL,
+                 SDL_General* SDL_GenPtr = NULL,
+                 Scene* scenePtr = NULL)
+        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr)
+    {}
+
+    void Process(const float& deltaTime) override
+    {
+        elapsedTime += deltaTime;
+        if (elapsedTime < spawnDelay) return;
+
+        // Move the current enemies up a level
+        for (int i = 0; i < scene->enemies.size(); i++) 
+        {
+            IncrementEnemyRowPos(scene->enemies[i]);
+        }
+
+        // Spawn a new enemy in a random col
+        int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0 + 1 ) );
+        std::cout << "New Col: " << std::to_string(col) << std::endl;
+        Alien* alien = new Alien(
+            Vector2Int(scene->mainGrid.colPos[col], scene->mainGrid.rowPos[0]),
+            "resources/enemy-01.png",
+            SDL_Gen,
+            scene);
+        alien->name = "Alien";
+        alien->w *= 3;
+        alien->h *= 3;
+        children.push_back(alien);
+        scene->enemies.push_back(alien);
+
+        elapsedTime = 0;
+    }
+
+    private:
+    const float spawnDelay = 2.0;
+    float elapsedTime = 0;
+
+    void IncrementEnemyRowPos(SDL_Rect* enemy) 
+    {
+        // Update the alien's world pos in accordance with cord
+        enemy->y += scene->mainGrid.elemSize.y;
+    }
 };
 
 class Ship : public GameObject
@@ -608,6 +671,15 @@ int main()
     ship.h *= 3;
     root.children.push_back(&ship);
 
+    // Create the enemy spawner
+    EnemySpawner spawner = EnemySpawner(
+        Vector2Int(0, 0),
+        NULL,
+        &SDL_Gen,
+        &scene);
+    spawner.name = "Enemy-Spawner";
+    root.children.push_back(&spawner);
+
     // Create the test alien
     Alien* alien = new Alien(
         Vector2Int(scene.mainGrid.colPos[3], 8),
@@ -617,7 +689,7 @@ int main()
     alien->name = "Alien";
     alien->w *= 3;
     alien->h *= 3;
-    root.children.push_back(alien);
+    spawner.children.push_back(alien);
     scene.enemies.push_back(alien);
 
     // Set to 1 when close window button pressed
