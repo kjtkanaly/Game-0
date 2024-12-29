@@ -5,6 +5,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 
 using namespace std;
 
@@ -59,9 +60,9 @@ struct Grid
         for (int i = 0; i < dim.x; i++) 
         {
             colPos.push_back(i * elemSize.x + origin.x);
-            std::cout << "Col Element: " 
-                    << std::to_string(i * elemSize.x + origin.x)
-                    << std::endl;
+            // std::cout << "Col Element: " 
+            //         << std::to_string(i * elemSize.x + origin.x)
+            //         << std::endl;
         }
     }
 
@@ -71,9 +72,9 @@ struct Grid
         for (int i = 0; i < dim.y; i++) 
         {
             rowPos.push_back(i * elemSize.y + origin.y);
-            std::cout << "Row Element: " 
-                    << std::to_string(i * elemSize.y + origin.y)
-                    << std::endl;
+            // std::cout << "Row Element: " 
+            //         << std::to_string(i * elemSize.y + origin.y)
+            //         << std::endl;
         }
     }
 };
@@ -103,6 +104,11 @@ public:
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) 
         { 
             std::cerr << "Error with Init: " << SDL_GetError() << std::endl; 
+        }
+
+        if(TTF_Init() < 0) 
+        {
+            std::cerr << "Couldn't initialize TTF lib: " << TTF_GetError() << std::endl;
         }
 
         std::cout << "Init successful!!!" 
@@ -158,6 +164,44 @@ public:
 
         // Clear the Window by setting it black
         SDL_RenderClear(rend);
+    }
+
+    SDL_Texture* CreateTextTexture(
+        TTF_Font* font,
+        const char* text,
+        SDL_Color color)
+    {
+        if (window == NULL) 
+        {
+            SDL_Quit();
+            std::cerr << "No Window Defined"
+                      << std::endl;
+        }
+
+        if (rend == NULL) 
+        {
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            std::cerr << "No Renderer Defined"
+                      << std::endl;
+        }
+
+        // Create the surface
+        SDL_Surface* surfaceMessage = TTF_RenderText_Solid(
+            font, 
+            text, 
+            color); 
+
+        // now you can convert it into a texture
+        SDL_Texture* textureMessage = SDL_CreateTextureFromSurface(
+            rend, 
+            surfaceMessage);
+
+        // Disposing of the surface now that it's in grahpic memory
+        SDL_FreeSurface(surfaceMessage);  
+
+        // Return message texture
+        return textureMessage;
     }
 
     SDL_Texture* LoadTexture(
@@ -304,6 +348,41 @@ class GameObject : public SDL_Rect
 
     protected: 
     bool destroyQueued = false;
+};
+
+class TextObject : public GameObject
+{
+    public:
+    TextObject(const Vector2Int& inPos = Vector2Int(0, 0),
+          SDL_General* SDL_GenPtr = NULL,
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL,
+          const char* fontFile = NULL,
+          int size = 24,
+          SDL_Color color = SDL_Color(),
+          const char* message = NULL)
+        : GameObject(inPos, SDL_GenPtr, scenePtr, rootPtr)
+    {
+        // This opens a font style and sets a size
+        TTF_Font* font = TTF_OpenFont(fontFile, size);
+
+        if ( !font ) 
+        {
+            std::cerr << "Error loading font: " << TTF_GetError() << std::endl;
+        }
+
+        // Get the text as a SDL Texture
+        tex = SDL_Gen->CreateTextTexture(
+            font,
+            message,
+            color);
+
+        // Get the dimensions of the sprite image
+        SDL_QueryTexture(tex, NULL, NULL, &w, &h);
+
+        std::cout << "Width: " << std::to_string(w) << std::endl;
+    }
+    private:
 };
 
 class SpriteObject : public GameObject
@@ -742,6 +821,20 @@ int main()
     alien->w *= 3;
     alien->h *= 3;
     spawner.children.push_back(alien);
+
+    // Creat test font
+    // SDL_Color color = {255, 255, 255, 255};
+    SDL_Color color = {255, 255, 255, 255};
+    TextObject testText = TextObject(
+        Vector2Int(751, 505),
+        &SDL_Gen,
+        &scene,
+        &root,
+        "resources/Born2bSportyV2.ttf",
+        32,
+        color,
+        "Score:");
+    root.children.push_back(&testText);
 
     // Set to 1 when close window button pressed
     int closeRequested = 0;
