@@ -9,6 +9,7 @@
 [X] Despawn bullets after they hit
 [X] Clean up use of pointer for enemy spawning
 [X] Clean up the laser hit boxes
-[ ] Add in the points system
+[X] Add in the points system
+[ ] Add the kill log
 
     

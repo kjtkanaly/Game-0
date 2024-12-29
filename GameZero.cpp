@@ -353,23 +353,45 @@ class GameObject : public SDL_Rect
 class TextObject : public GameObject
 {
     public:
+    enum HorzAlign
+    {
+        LEFT,
+        CENTER,
+        RIGHT
+    };
+
+    TTF_Font* font;
+    HorzAlign horzAlign;
+    SDL_Color color;
+    Vector2Int pos;
+
     TextObject(const Vector2Int& inPos = Vector2Int(0, 0),
           SDL_General* SDL_GenPtr = NULL,
           Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
+          const char* message = NULL,
           const char* fontFile = NULL,
           int size = 24,
-          SDL_Color color = SDL_Color(),
-          const char* message = NULL)
+          SDL_Color inColor = SDL_Color(),
+          HorzAlign inHorzAlign = HorzAlign::LEFT)
         : GameObject(inPos, SDL_GenPtr, scenePtr, rootPtr)
     {
+        // If no message passed in
+        if (message == NULL) cerr << "No message given for text object!" << endl;
+
         // This opens a font style and sets a size
-        TTF_Font* font = TTF_OpenFont(fontFile, size);
+        font = TTF_OpenFont(fontFile, size);
 
         if ( !font ) 
         {
             std::cerr << "Error loading font: " << TTF_GetError() << std::endl;
         }
+
+        // Set the color
+        color = inColor;
+
+        // Log the pos
+        pos = inPos;
 
         // Get the text as a SDL Texture
         tex = SDL_Gen->CreateTextTexture(
@@ -380,8 +402,64 @@ class TextObject : public GameObject
         // Get the dimensions of the sprite image
         SDL_QueryTexture(tex, NULL, NULL, &w, &h);
 
-        std::cout << "Width: " << std::to_string(w) << std::endl;
+        // Check alignment
+        horzAlign = inHorzAlign;
+        AdjustToHorzAlignment();
     }
+    
+    protected:
+    void AdjustToHorzAlignment()
+    {
+        switch(horzAlign) 
+        {
+            case HorzAlign::RIGHT:
+                x = pos.x - w;
+                break;
+            case HorzAlign::CENTER:
+                x = pos.x - w / 2;
+                break;
+            default:
+                break;
+        }
+    }
+
+    private:
+};
+
+class ScoreText : public TextObject
+{
+    public:
+    int value = 0;
+
+    ScoreText(const Vector2Int& inPos = Vector2Int(0, 0),
+          SDL_General* SDL_GenPtr = NULL,
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL,
+          const char* message = NULL,
+          const char* fontFile = NULL,
+          int size = 24,
+          SDL_Color color = SDL_Color(),
+          HorzAlign inHorzAlign = HorzAlign::LEFT)
+        : TextObject(inPos, SDL_GenPtr, scenePtr, rootPtr, message, fontFile, size, color, inHorzAlign)
+    {}
+
+    void UpdateValue(const int& inValue)
+    {
+        value += inValue;
+
+        // Get the text as a SDL Texture
+        tex = SDL_Gen->CreateTextTexture(
+            font,
+            to_string(value).c_str(),
+            color);
+
+        // Get the dimensions of the sprite image
+        SDL_QueryTexture(tex, NULL, NULL, &w, &h);
+
+        // Set the alignment
+        AdjustToHorzAlignment();
+    }
+
     private:
 };
 
@@ -473,7 +551,11 @@ class Alien : public SpriteObject
           const char* spriteFile = NULL)
         : SpriteObject(inPos, SDL_GenPtr, scenePtr, rootPtr, spriteFile)
     {
+        // Set the game object type
         type = Type::ENEMY;
+
+        // Get the score value ptr
+        DigForScoreValue(root);
     }
 
     void Process(const float& deltaTime) override
@@ -482,10 +564,18 @@ class Alien : public SpriteObject
         if (IsHit(root)) TakeDamage();
 
         // Check if the alien is dead
-        if (health <= 0) SetDestroyQueuedVal(true);
+        if (health <= 0) 
+        {
+            scoreValue->UpdateValue(pointValue);
+            SetDestroyQueuedVal(true);
+        }
     }
 
     private:
+    int health = 2;
+    int pointValue = 10;
+    ScoreText* scoreValue;
+
     bool IsHit(GameObject* node)
     {
         // Loop over the projectiles
@@ -508,8 +598,15 @@ class Alien : public SpriteObject
         health -= 1;
     }
 
-    // Props
-    int health = 2;
+    void DigForScoreValue(GameObject* node)
+    {
+        for (int i = 0; i < node->children.size(); i++) 
+        {
+            DigForScoreValue(node->children[i]);
+        }
+
+        if (node->name == "Score-Value") scoreValue = (ScoreText*) node;
+    }
 };
 
 class EnemySpawner : public GameObject
@@ -714,7 +811,7 @@ void RenderGameObjects(GameObject* node)
     SDL_RenderCopy(
         node->SDL_Gen->rend, 
         node->tex, 
-        NULL, 
+        NULL,
         node);
 }
 
@@ -810,34 +907,67 @@ int main()
     spawner.name = "Enemy-Spawner";
     root.children.push_back(&spawner);
 
-    // Create the test alien
-    Alien* alien = new Alien(
-        Vector2Int(scene.mainGrid.colPos[3], 8),
-        &SDL_Gen,
-        &scene,
-        &root,
-        "resources/enemy-01.png");
-    alien->name = "Alien";
-    alien->w *= 3;
-    alien->h *= 3;
-    spawner.children.push_back(alien);
-
-    // Creat test font
-    // SDL_Color color = {255, 255, 255, 255};
+    // Create the color for the font
     SDL_Color color = {255, 255, 255, 255};
-    TextObject testText = TextObject(
+
+    // Create the score text
+    const char* fontFile = "resources/Born2bSportyV2.ttf";
+    TextObject scoreText = TextObject(
         Vector2Int(751, 505),
         &SDL_Gen,
         &scene,
         &root,
-        "resources/Born2bSportyV2.ttf",
+        "Score:",
+        fontFile,
+        32,
+        color);
+    scoreText.name = "Score-Text";
+    root.children.push_back(&scoreText);
+
+    // Create the score value
+    ScoreText scoreValue = ScoreText(
+        Vector2Int(945, 505),
+        &SDL_Gen,
+        &scene,
+        &root,
+        "999",
+        fontFile,
         32,
         color,
-        "Score:");
-    root.children.push_back(&testText);
+        TextObject::HorzAlign::RIGHT);
+    scoreValue.name = "Score-Value";
+    root.children.push_back(&scoreValue);
+    scoreValue.UpdateValue(0);
+    
+    cout << "Dest Rect:" 
+         << endl
+         << "X: " << to_string(scoreValue.x) << " Y: " << to_string(scoreValue.y) << endl
+         << "W: " << to_string(scoreValue.w) << " H: " << to_string(scoreValue.h) << endl
+         << endl;
 
     // Set to 1 when close window button pressed
     int closeRequested = 0;
+
+    // SDL_Rect srcRect;
+    // SDL_Rect dstRect;
+
+    // // Load in the following texture
+    // SDL_Texture* tex = SDL_Gen.LoadTexture("resources/ship-01.png");
+
+    // SDL_QueryTexture(tex, NULL, NULL, &srcRect.w, &srcRect.h);
+    // SDL_QueryTexture(tex, NULL, NULL, &dstRect.w, &dstRect.h);
+
+    // // This controls the box
+    // srcRect.x = 0;
+    // srcRect.y = 0;
+    // srcRect.w *= 2;
+    // // srcRect.h *= 4;
+
+    // // This controls the actual texture
+    // dstRect.x = srcRect.w / 2;
+    // dstRect.y = 0;
+    // // dstRect.w *= 4;
+    // // dstRect.h *= 4;
 
     // Main Loop
     while (!closeRequested) 
@@ -869,6 +999,11 @@ int main()
 
         // Draw the ship to the render window
         RenderGameObjects(&root);
+        // SDL_RenderCopy(
+        //     SDL_Gen.rend, 
+        //     tex, 
+        //     &srcRect, 
+        //     &dstRect);
 
         // Swaps the render from the back buffer to the front
         SDL_RenderPresent(SDL_Gen.rend);
