@@ -3,9 +3,11 @@
 [X] Get ship laser spawning working
 [X] Change the ship movement logic to use ease logic
 [X] Init enemy grid
-[ ] Get enemy spawning working
+[X] Get enemy spawning working
 [X] Get enemy death working
 [ ] Get enemy hit animations working
 [X] Despawn bullets after they hit
+[X] Clean up use of pointer for enemy spawning
+[ ] Clean up the hit boxes
 
     

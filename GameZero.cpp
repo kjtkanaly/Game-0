@@ -228,13 +228,13 @@ public:
 // -----------------------------------------------------------------------------
 // Objects
 
+
+
 class Scene
 {
     public:
     Frame mainFrame;
     Grid mainGrid;
-    std::vector<SDL_Rect*> projectiles;
-    std::vector<SDL_Rect*> enemies;
 
     Scene()
     {
@@ -250,16 +250,28 @@ class Scene
 
 class GameObject : public SDL_Rect{
     public:
+    enum Type
+    {
+        ENEMY,
+        PROJECTILE,
+        PLAYER,
+        ROOT,
+        DEFAULT
+    };
+
     std::string name;
+    Type type = Type::DEFAULT;
     SDL_Texture* tex;
     SDL_General* SDL_Gen;
     Scene* scene;
+    GameObject* root;
     std::vector<GameObject*> children;
 
     GameObject(const Vector2Int& inPos = Vector2Int(0, 0),
                const char* spriteFile = NULL,
                SDL_General* SDL_GenPtr = NULL,
-               Scene* scenePtr = NULL) :
+               Scene* scenePtr = NULL,
+               GameObject* rootPtr = NULL) :
         children()
     {
         // Set the position of the game object
@@ -281,6 +293,9 @@ class GameObject : public SDL_Rect{
 
         // Set the pointer to the scene object
         scene = scenePtr;
+
+        // Set the root pointer
+        root = rootPtr;
     }
 
     virtual void Process(const float& deltaTime) {}
@@ -294,7 +309,7 @@ class GameObject : public SDL_Rect{
     void SetDestroyQueuedVal(bool inVal) 
     { 
         destroyQueued = inVal; 
-        if (inVal) std::cout << "Queue deletion..." << std::endl;
+        if (inVal) std::cout << name << " deletion queued..." << std::endl;
     }
 
     protected: 
@@ -306,11 +321,14 @@ class Laser : public GameObject {
     Laser(const Vector2Int& inPos = Vector2Int(0, 0),
           const char* spriteFile = NULL,
           SDL_General* SDL_GenPtr = NULL,
-          Scene* scenePtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr)
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL)
+        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
     {
         pos.x = (float) x;
         pos.y = (float) y;
+
+        type = Type::PROJECTILE;
     }
 
     void Process(const float& deltaTime) override
@@ -320,7 +338,7 @@ class Laser : public GameObject {
         if (upTime >= maxTime) SetDestroyQueuedVal(true);
 
         // Check if the laer is colliding with an enemy
-        if (IsCollidingWithEnemy()) SetDestroyQueuedVal(true);
+        if (IsCollidingWithEnemy(root)) SetDestroyQueuedVal(true);
 
         // Update the position
         pos.y -= speed * deltaTime;
@@ -335,14 +353,19 @@ class Laser : public GameObject {
     float upTime = 0;
     float maxTime = 2.0f;
 
-    bool IsCollidingWithEnemy()
+    bool IsCollidingWithEnemy(GameObject* node)
     {
-        for (int i = 0; i < scene->enemies.size(); i++) 
+        // Loop through the children 
+        for (int i = 0; i < node->children.size(); i++) 
         {
-            if (SDL_HasIntersection(this, scene->enemies[i])) return true;
+            if (IsCollidingWithEnemy(node->children[i])) return true;
         }
 
-        return false;
+        // If not an enemy then return false
+        if (node->type != GameObject::Type::ENEMY) return false;
+
+        // No hits
+        return (SDL_HasIntersection(this, node));
     }
 };
 
@@ -352,29 +375,35 @@ class Alien : public GameObject
     Alien(const Vector2Int& inPos = Vector2Int(0, 0),
           const char* spriteFile = NULL,
           SDL_General* SDL_GenPtr = NULL,
-          Scene* scenePtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr)
-    {}
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL)
+        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
+    {
+        type = Type::ENEMY;
+    }
 
     void Process(const float& deltaTime) override
     {
         // Check if the alien is being hit by a projectile
-        if (IsHit()) TakeDamage();
+        if (IsHit(root)) TakeDamage();
 
         // Check if the alien is dead
-        if (health <= 0) destroyQueued = true;
+        if (health <= 0) SetDestroyQueuedVal(true);
     }
 
     private:
-    bool IsHit()
+    bool IsHit(GameObject* node)
     {
         // Loop over the projectiles
-        for (int i = 0; i < scene->projectiles.size(); i++) {
-            if (SDL_HasIntersection(this, scene->projectiles[i])) return true;
+        for (int i = 0; i < node->children.size(); i++) {
+            if (IsHit(node->children[i])) return true;
         }
 
+        // If not projectile then return false
+        if (node->type != GameObject::Type::PROJECTILE) return false;
+
         // No hits
-        return false;
+        return (SDL_HasIntersection(this, node));
     }
 
     void TakeDamage()
@@ -395,8 +424,9 @@ class EnemySpawner : public GameObject
     EnemySpawner(const Vector2Int& inPos = Vector2Int(0, 0),
                  const char* spriteFile = NULL,
                  SDL_General* SDL_GenPtr = NULL,
-                 Scene* scenePtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr)
+                 Scene* scenePtr = NULL,
+                 GameObject* rootPtr = NULL)
+        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
     {}
 
     void Process(const float& deltaTime) override
@@ -405,10 +435,7 @@ class EnemySpawner : public GameObject
         if (elapsedTime < spawnDelay) return;
 
         // Move the current enemies up a level
-        for (int i = 0; i < scene->enemies.size(); i++) 
-        {
-            IncrementEnemyRowPos(scene->enemies[i]);
-        }
+        IncrementRowPosOfEnemies(root);
 
         // Spawn a new enemy in a random col
         int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0 + 1 ) );
@@ -417,12 +444,12 @@ class EnemySpawner : public GameObject
             Vector2Int(scene->mainGrid.colPos[col], scene->mainGrid.rowPos[0]),
             "resources/enemy-01.png",
             SDL_Gen,
-            scene);
+            scene,
+            root);
         alien->name = "Alien";
         alien->w *= 3;
         alien->h *= 3;
         children.push_back(alien);
-        scene->enemies.push_back(alien);
 
         elapsedTime = 0;
     }
@@ -431,10 +458,19 @@ class EnemySpawner : public GameObject
     const float spawnDelay = 2.0;
     float elapsedTime = 0;
 
-    void IncrementEnemyRowPos(SDL_Rect* enemy) 
+    void IncrementRowPosOfEnemies(GameObject* node) 
     {
+        // Loop through the children
+        for (int i = 0; i < node->children.size(); i++) 
+        {
+            IncrementRowPosOfEnemies(node->children[i]);
+        }
+
+        // If not an enemy then return false
+        if (node->type != GameObject::Type::ENEMY) return;
+
         // Update the alien's world pos in accordance with cord
-        enemy->y += scene->mainGrid.elemSize.y;
+        node->y += scene->mainGrid.elemSize.y;
     }
 };
 
@@ -444,8 +480,9 @@ class Ship : public GameObject
     Ship(const Vector2Int& inPos = Vector2Int(0, 0),
           const char* spriteFile = NULL,
           SDL_General* SDL_GenPtr = NULL,
-          Scene* scenePtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr)
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL)
+        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
     {
         float startPos = (float) x;
         float targetPos = startPos;
@@ -555,14 +592,12 @@ class Ship : public GameObject
             Vector2Int(x, y), 
             "resources/laser-01.png",
             SDL_Gen,
-            scene);
+            scene,
+            root);
         laser->name = "laser";
         laser->w *= 3;
         laser->h *= 3;
         children.push_back(laser);
-
-        // Add the laser bolt to the project list
-        scene->projectiles.push_back(laser);
     }
 
     private:
@@ -613,7 +648,7 @@ void DestoryQueuedObjects(GameObject* node)
         // Destory the object
         if (node->children[i]->GetDestroyQueuedVal()) 
         {
-            std::cout << "Deleting object!" << std::endl;
+            std::cout << "Deleting " << node->children[i]->name << "!" << std::endl;
             node->children[i]->Destroy();
             node->children.erase(node->children.begin() + i);
         }
@@ -648,7 +683,8 @@ int main()
         Vector2Int(0, 0),
         NULL,
         &SDL_Gen,
-        &scene);
+        &scene,
+        NULL);
     root.name = "Root";
 
     // Create the Background object
@@ -656,7 +692,8 @@ int main()
         Vector2Int(0, 0), 
         "resources/main-game-bckg.png",
         &SDL_Gen,
-        &scene);
+        &scene,
+        &root);
     background.name = "Background";
     root.children.push_back(&background);
 
@@ -665,7 +702,8 @@ int main()
         Vector2Int(scene.mainGrid.colPos[3], 595), 
         "resources/ship-01.png",
         &SDL_Gen,
-        &scene);
+        &scene,
+        &root);
     ship.name = "Ship";
     ship.w *= 3;
     ship.h *= 3;
@@ -676,7 +714,8 @@ int main()
         Vector2Int(0, 0),
         NULL,
         &SDL_Gen,
-        &scene);
+        &scene,
+        &root);
     spawner.name = "Enemy-Spawner";
     root.children.push_back(&spawner);
 
@@ -685,12 +724,12 @@ int main()
         Vector2Int(scene.mainGrid.colPos[3], 8),
         "resources/enemy-01.png",
         &SDL_Gen,
-        &scene);
+        &scene,
+        &root);
     alien->name = "Alien";
     alien->w *= 3;
     alien->h *= 3;
     spawner.children.push_back(alien);
-    scene.enemies.push_back(alien);
 
     // Set to 1 when close window button pressed
     int closeRequested = 0;
