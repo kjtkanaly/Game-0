@@ -8,6 +8,7 @@
 [ ] Get enemy hit animations working
 [X] Despawn bullets after they hit
 [X] Clean up use of pointer for enemy spawning
-[ ] Clean up the hit boxes
+[X] Clean up the laser hit boxes
+[ ] Add in the points system
 
     

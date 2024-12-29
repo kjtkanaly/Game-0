@@ -248,7 +248,8 @@ class Scene
     }
 };
 
-class GameObject : public SDL_Rect{
+class GameObject : public SDL_Rect
+{
     public:
     enum Type
     {
@@ -268,7 +269,6 @@ class GameObject : public SDL_Rect{
     std::vector<GameObject*> children;
 
     GameObject(const Vector2Int& inPos = Vector2Int(0, 0),
-               const char* spriteFile = NULL,
                SDL_General* SDL_GenPtr = NULL,
                Scene* scenePtr = NULL,
                GameObject* rootPtr = NULL) :
@@ -278,18 +278,8 @@ class GameObject : public SDL_Rect{
         x = inPos.x;
         y = inPos.y;
 
+        // Set the SDL General pointer
         SDL_Gen = SDL_GenPtr;
-
-        // Set the game object's sprite
-        if (spriteFile != NULL) {
-            if (SDL_Gen == NULL) std::cerr << "SDL Gen is NULL" << std::endl;
-
-            // Load in the following texture
-            tex = SDL_Gen->LoadTexture(spriteFile);
-
-            // Get the dimensions of the sprite image
-            SDL_QueryTexture(tex, NULL, NULL, &w, &h);
-        }
 
         // Set the pointer to the scene object
         scene = scenePtr;
@@ -316,14 +306,39 @@ class GameObject : public SDL_Rect{
     bool destroyQueued = false;
 };
 
-class Laser : public GameObject {
+class SpriteObject : public GameObject
+{
     public:
-    Laser(const Vector2Int& inPos = Vector2Int(0, 0),
-          const char* spriteFile = NULL,
+    SpriteObject(const Vector2Int& inPos = Vector2Int(0, 0),
           SDL_General* SDL_GenPtr = NULL,
           Scene* scenePtr = NULL,
-          GameObject* rootPtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
+          GameObject* rootPtr = NULL,
+          const char* spriteFile = NULL)
+        : GameObject(inPos, SDL_GenPtr, scenePtr, rootPtr)
+    {
+        // Set the game object's sprite
+        if (spriteFile != NULL) {
+            if (SDL_Gen == NULL) std::cerr << "SDL Gen is NULL" << std::endl;
+
+            // Load in the following texture
+            tex = SDL_Gen->LoadTexture(spriteFile);
+
+            // Get the dimensions of the sprite image
+            SDL_QueryTexture(tex, NULL, NULL, &w, &h);
+        }
+    }
+
+    private:
+};
+
+class Laser : public SpriteObject {
+    public:
+    Laser(const Vector2Int& inPos = Vector2Int(0, 0),
+          SDL_General* SDL_GenPtr = NULL,
+          Scene* scenePtr = NULL,
+          GameObject* rootPtr = NULL,
+          const char* spriteFile = NULL)
+        : SpriteObject(inPos, SDL_GenPtr, scenePtr, rootPtr, spriteFile)
     {
         pos.x = (float) x;
         pos.y = (float) y;
@@ -369,15 +384,15 @@ class Laser : public GameObject {
     }
 };
 
-class Alien : public GameObject
+class Alien : public SpriteObject
 {
     public:
     Alien(const Vector2Int& inPos = Vector2Int(0, 0),
-          const char* spriteFile = NULL,
           SDL_General* SDL_GenPtr = NULL,
           Scene* scenePtr = NULL,
-          GameObject* rootPtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
+          GameObject* rootPtr = NULL,
+          const char* spriteFile = NULL)
+        : SpriteObject(inPos, SDL_GenPtr, scenePtr, rootPtr, spriteFile)
     {
         type = Type::ENEMY;
     }
@@ -422,11 +437,10 @@ class EnemySpawner : public GameObject
 {
     public:
     EnemySpawner(const Vector2Int& inPos = Vector2Int(0, 0),
-                 const char* spriteFile = NULL,
                  SDL_General* SDL_GenPtr = NULL,
                  Scene* scenePtr = NULL,
                  GameObject* rootPtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
+        : GameObject(inPos, SDL_GenPtr, scenePtr, rootPtr)
     {}
 
     void Process(const float& deltaTime) override
@@ -438,14 +452,14 @@ class EnemySpawner : public GameObject
         IncrementRowPosOfEnemies(root);
 
         // Spawn a new enemy in a random col
-        int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0 + 1 ) );
+        int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0) );
         std::cout << "New Col: " << std::to_string(col) << std::endl;
         Alien* alien = new Alien(
             Vector2Int(scene->mainGrid.colPos[col], scene->mainGrid.rowPos[0]),
-            "resources/enemy-01.png",
             SDL_Gen,
             scene,
-            root);
+            root,
+            "resources/enemy-01.png");
         alien->name = "Alien";
         alien->w *= 3;
         alien->h *= 3;
@@ -474,15 +488,15 @@ class EnemySpawner : public GameObject
     }
 };
 
-class Ship : public GameObject
+class Ship : public SpriteObject
 {
     public:
     Ship(const Vector2Int& inPos = Vector2Int(0, 0),
-          const char* spriteFile = NULL,
-          SDL_General* SDL_GenPtr = NULL,
-          Scene* scenePtr = NULL,
-          GameObject* rootPtr = NULL)
-        : GameObject(inPos, spriteFile, SDL_GenPtr, scenePtr, rootPtr)
+         SDL_General* SDL_GenPtr = NULL,
+         Scene* scenePtr = NULL,
+         GameObject* rootPtr = NULL,
+         const char* spriteFile = NULL)
+        : SpriteObject(inPos, SDL_GenPtr, scenePtr, rootPtr, spriteFile)
     {
         float startPos = (float) x;
         float targetPos = startPos;
@@ -589,11 +603,11 @@ class Ship : public GameObject
     {
         // Spawn a laser bolt
         Laser* laser = new Laser(
-            Vector2Int(x, y), 
-            "resources/laser-01.png",
+            Vector2Int(x + w / 2, y),
             SDL_Gen,
             scene,
-            root);
+            root,
+            "resources/laser-01.png");
         laser->name = "laser";
         laser->w *= 3;
         laser->h *= 3;
@@ -681,29 +695,28 @@ int main()
     // Create the scene tree list
     GameObject root = GameObject(
         Vector2Int(0, 0),
-        NULL,
         &SDL_Gen,
         &scene,
         NULL);
     root.name = "Root";
 
     // Create the Background object
-    GameObject background = GameObject(
-        Vector2Int(0, 0), 
-        "resources/main-game-bckg.png",
+    GameObject background = SpriteObject(
+        Vector2Int(0, 0),
         &SDL_Gen,
         &scene,
-        &root);
+        &root,
+        "resources/main-game-bckg.png");
     background.name = "Background";
     root.children.push_back(&background);
 
     // Create the ship object
     Ship ship = Ship(
-        Vector2Int(scene.mainGrid.colPos[3], 595), 
-        "resources/ship-01.png",
+        Vector2Int(scene.mainGrid.colPos[3], 595),
         &SDL_Gen,
         &scene,
-        &root);
+        &root,
+        "resources/ship-01.png");
     ship.name = "Ship";
     ship.w *= 3;
     ship.h *= 3;
@@ -712,7 +725,6 @@ int main()
     // Create the enemy spawner
     EnemySpawner spawner = EnemySpawner(
         Vector2Int(0, 0),
-        NULL,
         &SDL_Gen,
         &scene,
         &root);
@@ -722,10 +734,10 @@ int main()
     // Create the test alien
     Alien* alien = new Alien(
         Vector2Int(scene.mainGrid.colPos[3], 8),
-        "resources/enemy-01.png",
         &SDL_Gen,
         &scene,
-        &root);
+        &root,
+        "resources/enemy-01.png");
     alien->name = "Alien";
     alien->w *= 3;
     alien->h *= 3;
