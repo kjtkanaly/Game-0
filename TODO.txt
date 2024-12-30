@@ -1,0 +1,18 @@
+[X] Init project
+[X] Get ship movement working
+[X] Get ship laser spawning working
+[X] Change the ship movement logic to use ease logic
+[X] Init enemy grid
+[X] Get enemy spawning working
+[X] Get enemy death working
+[ ] Get enemy hit animations working
+[X] Despawn bullets after they hit
+[X] Clean up use of pointer for enemy spawning
+[X] Clean up the laser hit boxes
+[X] Add in the points system
+[X] Add the kill log
+[X] Address bug where the laser's get destroyed after the alien pos gets updated
+[ ] Add the active item slot
+[ ] Add destroy for children objects
+
+    
