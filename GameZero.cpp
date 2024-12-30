@@ -305,18 +305,15 @@ class Scene
         killLogEntry.push_back(logValue);
         killLogEntry.push_back(logName);
 
-        if (killLogList.size() >= killLogGrid.dim.y)
+        // for (int i = 0; i < killLogList.size(); i++)
+        for (int i = killLogList.size() - 1; i >= 0; i--)
         {
-            killLogList.pop_back();
-        }
-
-        for (int i = 0; i < killLogList.size(); i++)
-        {
-            killLogList[i][0]->y = killLogGrid.rowPos[killLogGrid.rowPos.size() - 2 - i];
-            killLogList[i][1]->y = killLogGrid.rowPos[killLogGrid.rowPos.size() - 2 - i];
+            killLogList[i][0]->y -= killLogGrid.elemSize.y;
+            killLogList[i][1]->y -= killLogGrid.elemSize.y;
         }
         
         killLogList.push_back(killLogEntry);
+        cout << "Log list length: " << to_string(killLogList.size()) << endl;
     }
 };
 
@@ -472,6 +469,7 @@ class ScoreText : public TextObject
 
     void UpdateValue(const int& inValue)
     {
+        // Increment the value
         value += inValue;
 
         // Get the text as a SDL Texture
@@ -630,6 +628,13 @@ class Alien : public SpriteObject
 
             scene->AppendKillLog(logName, logValue);
 
+            if (scene->killLogList.size() > scene->killLogGrid.dim.y)
+            {
+                ((GameObject*) scene->killLogList[0][0])->SetDestroyQueuedVal(true);
+                ((GameObject*) scene->killLogList[0][1])->SetDestroyQueuedVal(true);
+                scene->killLogList.erase(scene->killLogList.begin(), scene->killLogList.begin()+1);
+            }
+
             // Update the score value
             scoreValue->UpdateValue(pointValue);
 
@@ -658,6 +663,58 @@ class Alien : public SpriteObject
         health -= 1;
     }
 
+    void DamagePlayer()
+    {
+        // Update the hill log
+        SDL_Color color = {255, 100, 60, 255};
+
+        TextObject* logName = new TextObject(
+            Vector2Int(
+                scene->killLogGrid.colPos[0], 
+                scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
+            SDL_Gen,
+            scene,
+            root,
+            name.c_str(),
+            "resources/Born2bSportyV2.ttf",
+            32,
+            color);
+        logName->name = "Kill-Log-Name";
+        root->children.push_back(logName);
+
+        std::string valMod = "-";
+
+        TextObject* logValue = new TextObject(
+            Vector2Int(
+                scene->killLogGrid.origin.x + scene->killLogGrid.elemSize.x, 
+                scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
+            SDL_Gen,
+            scene,
+            root,
+            (valMod + to_string(pointValue)).c_str(),
+            "resources/Born2bSportyV2.ttf",
+            32,
+            color,
+            TextObject::HorzAlign::RIGHT);
+        logValue->name = "Kill-Log-Value";
+        root->children.push_back(logValue);
+
+        scene->AppendKillLog(logName, logValue);
+
+        if (scene->killLogList.size() > scene->killLogGrid.dim.y)
+        {
+            ((GameObject*) scene->killLogList[0][0])->SetDestroyQueuedVal(true);
+            ((GameObject*) scene->killLogList[0][1])->SetDestroyQueuedVal(true);
+            scene->killLogList.erase(scene->killLogList.begin(), scene->killLogList.begin()+1);
+        }
+
+        // Update the score value
+        scoreValue->UpdateValue(-1 * pointValue);
+
+        // Log the enemy to be destroyed
+        SetDestroyQueuedVal(true);
+    }
+
     private:
     int health = 2;
     int pointValue = 10;
@@ -670,7 +727,7 @@ class Alien : public SpriteObject
             DigForScoreValue(node->children[i]);
         }
 
-        if (node->name == "Score-Value") scoreValue = (ScoreText*) node;
+        if (node->name == "Overall-Score-Value") scoreValue = (ScoreText*) node;
     }
 };
 
@@ -709,7 +766,7 @@ class EnemySpawner : public GameObject
     }
 
     private:
-    const float spawnDelay = 2.0;
+    const float spawnDelay = 1.0;
     float elapsedTime = 0;
 
     void IncrementRowPosOfEnemies(GameObject* node) 
@@ -728,6 +785,12 @@ class EnemySpawner : public GameObject
 
         // Cast the game object pointer to an alien pointer
         Alien* alien = (Alien*) node;
+
+        // Check if the alien has reached the player's level
+        int didDamageLevel = 
+            scene->mainGrid.rowPos[scene->mainGrid.rowPos.size() - 1] 
+            + scene->mainGrid.elemSize.y;
+        if (node->y >= didDamageLevel) alien->DamagePlayer();
 
         // Check if they should be taking damage in it's new position
         if (alien->IsHit(root)) alien->TakeDamage();
@@ -946,7 +1009,7 @@ int main()
     root.name = "Root";
 
     // Create the Background object
-    GameObject background = SpriteObject(
+    SpriteObject background = SpriteObject(
         Vector2Int(0, 0),
         &SDL_Gen,
         &scene,
@@ -957,7 +1020,9 @@ int main()
 
     // Create the ship object
     Ship ship = Ship(
-        Vector2Int(scene.mainGrid.colPos[3], 595),
+        Vector2Int(
+            scene.mainGrid.colPos[3], 
+            scene.mainGrid.rowPos[scene.mainGrid.rowPos.size() - 1]),
         &SDL_Gen,
         &scene,
         &root,
@@ -966,6 +1031,18 @@ int main()
     ship.w *= 3;
     ship.h *= 3;
     root.children.push_back(&ship);
+
+    // Create the damage zone bar
+    SpriteObject damageBar = SpriteObject(
+        Vector2Int(
+            scene.mainFrame.origin.x, 
+            scene.mainGrid.rowPos[scene.mainGrid.rowPos.size() - 1] + scene.mainGrid.elemSize.y + 8),
+        &SDL_Gen,
+        &scene,
+        &root,
+        "resources/Damage-Bar.png");
+    damageBar.name = "Damage-Bar";
+    root.children.push_back(&damageBar);
 
     // Create the enemy spawner
     EnemySpawner spawner = EnemySpawner(
@@ -1004,7 +1081,7 @@ int main()
         32,
         color,
         TextObject::HorzAlign::RIGHT);
-    scoreValue.name = "Score-Value";
+    scoreValue.name = "Overall-Score-Value";
     root.children.push_back(&scoreValue);
     scoreValue.UpdateValue(0);
 
