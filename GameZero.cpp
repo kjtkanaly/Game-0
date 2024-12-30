@@ -266,19 +266,17 @@ public:
 };
 // -----------------------------------------------------------------------------
 
-
-// -----------------------------------------------------------------------------
-
 // -----------------------------------------------------------------------------
 // Objects
-
-
 
 class Scene
 {
     public:
     Frame mainFrame;
+    Frame killLogFrame;
     Grid mainGrid;
+    Grid killLogGrid;
+    std::vector<std::vector<SDL_Rect*>> killLogList;
 
     Scene()
     {
@@ -289,6 +287,36 @@ class Scene
         mainGrid.elemSize = Vector2Int(90, 90);
         mainGrid.MakeColPosArray();
         mainGrid.MakeRowPosArray();
+
+        killLogFrame.origin = Vector2Int(750, 16);
+        killLogFrame.size = Vector2Int(208, 489);
+
+        killLogGrid.origin = killLogFrame.origin;
+        killLogGrid.dim = Vector2Int(1, 10);
+        killLogGrid.elemSize = Vector2Int(195, 48);
+        killLogGrid.MakeColPosArray();
+        killLogGrid.MakeRowPosArray();
+    }
+
+    void AppendKillLog(SDL_Rect* logName, SDL_Rect* logValue)
+    {
+        // Kill Log entry
+        std::vector<SDL_Rect*> killLogEntry;
+        killLogEntry.push_back(logValue);
+        killLogEntry.push_back(logName);
+
+        if (killLogList.size() >= killLogGrid.dim.y)
+        {
+            killLogList.pop_back();
+        }
+
+        for (int i = 0; i < killLogList.size(); i++)
+        {
+            killLogList[i][0]->y = killLogGrid.rowPos[killLogGrid.rowPos.size() - 2 - i];
+            killLogList[i][1]->y = killLogGrid.rowPos[killLogGrid.rowPos.size() - 2 - i];
+        }
+        
+        killLogList.push_back(killLogEntry);
     }
 };
 
@@ -343,7 +371,6 @@ class GameObject : public SDL_Rect
     void SetDestroyQueuedVal(bool inVal) 
     { 
         destroyQueued = inVal; 
-        if (inVal) std::cout << name << " deletion queued..." << std::endl;
     }
 
     protected: 
@@ -566,15 +593,50 @@ class Alien : public SpriteObject
         // Check if the alien is dead
         if (health <= 0) 
         {
+            // Update the hill log
+            // SDL_Color color = {255, 100, 60, 255};
+            SDL_Color color = {100, 255, 150, 255};
+
+            TextObject* logName = new TextObject(
+                Vector2Int(
+                    scene->killLogGrid.colPos[0], 
+                    scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
+                SDL_Gen,
+                scene,
+                root,
+                name.c_str(),
+                "resources/Born2bSportyV2.ttf",
+                32,
+                color);
+            logName->name = "Kill-Log-Name";
+            root->children.push_back(logName);
+
+            std::string valMod = "+";
+
+            TextObject* logValue = new TextObject(
+                Vector2Int(
+                    scene->killLogGrid.origin.x + scene->killLogGrid.elemSize.x, 
+                    scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
+                SDL_Gen,
+                scene,
+                root,
+                (valMod + to_string(pointValue)).c_str(),
+                "resources/Born2bSportyV2.ttf",
+                32,
+                color,
+                TextObject::HorzAlign::RIGHT);
+            logValue->name = "Kill-Log-Value";
+            root->children.push_back(logValue);
+
+            scene->AppendKillLog(logName, logValue);
+
+            // Update the score value
             scoreValue->UpdateValue(pointValue);
+
+            // Queue destruction
             SetDestroyQueuedVal(true);
         }
     }
-
-    private:
-    int health = 2;
-    int pointValue = 10;
-    ScoreText* scoreValue;
 
     bool IsHit(GameObject* node)
     {
@@ -592,11 +654,14 @@ class Alien : public SpriteObject
 
     void TakeDamage()
     {
-        std::cout << "Alien takes damage!" << std::endl;
-
         // Tick the health 
         health -= 1;
     }
+
+    private:
+    int health = 2;
+    int pointValue = 10;
+    ScoreText* scoreValue;
 
     void DigForScoreValue(GameObject* node)
     {
@@ -629,7 +694,6 @@ class EnemySpawner : public GameObject
 
         // Spawn a new enemy in a random col
         int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0) );
-        std::cout << "New Col: " << std::to_string(col) << std::endl;
         Alien* alien = new Alien(
             Vector2Int(scene->mainGrid.colPos[col], scene->mainGrid.rowPos[0]),
             SDL_Gen,
@@ -661,6 +725,12 @@ class EnemySpawner : public GameObject
 
         // Update the alien's world pos in accordance with cord
         node->y += scene->mainGrid.elemSize.y;
+
+        // Cast the game object pointer to an alien pointer
+        Alien* alien = (Alien*) node;
+
+        // Check if they should be taking damage in it's new position
+        if (alien->IsHit(root)) alien->TakeDamage();
     }
 };
 
@@ -838,7 +908,6 @@ void DestoryQueuedObjects(GameObject* node)
         // Destory the object
         if (node->children[i]->GetDestroyQueuedVal()) 
         {
-            std::cout << "Deleting " << node->children[i]->name << "!" << std::endl;
             node->children[i]->Destroy();
             node->children.erase(node->children.begin() + i);
         }
@@ -938,36 +1007,32 @@ int main()
     scoreValue.name = "Score-Value";
     root.children.push_back(&scoreValue);
     scoreValue.UpdateValue(0);
-    
-    cout << "Dest Rect:" 
-         << endl
-         << "X: " << to_string(scoreValue.x) << " Y: " << to_string(scoreValue.y) << endl
-         << "W: " << to_string(scoreValue.w) << " H: " << to_string(scoreValue.h) << endl
-         << endl;
 
+    // Create the active item text
+    TextObject activeItemText = TextObject(
+        Vector2Int(783, 555),
+        &SDL_Gen,
+        &scene,
+        &root,
+        "Active Item",
+        fontFile,
+        32,
+        color);
+    activeItemText.name = "Active-Item-Text";
+    root.children.push_back(&activeItemText);
+
+    // Create the active tiem slot
+    SpriteObject activeItemSlot = SpriteObject(
+        Vector2Int(803, 598),
+        &SDL_Gen,
+        &scene,
+        &root,
+        "resources/active-item-slot.png");
+    activeItemSlot.name = "Active-Item-Slot";
+    root.children.push_back(&activeItemSlot);
+    
     // Set to 1 when close window button pressed
     int closeRequested = 0;
-
-    // SDL_Rect srcRect;
-    // SDL_Rect dstRect;
-
-    // // Load in the following texture
-    // SDL_Texture* tex = SDL_Gen.LoadTexture("resources/ship-01.png");
-
-    // SDL_QueryTexture(tex, NULL, NULL, &srcRect.w, &srcRect.h);
-    // SDL_QueryTexture(tex, NULL, NULL, &dstRect.w, &dstRect.h);
-
-    // // This controls the box
-    // srcRect.x = 0;
-    // srcRect.y = 0;
-    // srcRect.w *= 2;
-    // // srcRect.h *= 4;
-
-    // // This controls the actual texture
-    // dstRect.x = srcRect.w / 2;
-    // dstRect.y = 0;
-    // // dstRect.w *= 4;
-    // // dstRect.h *= 4;
 
     // Main Loop
     while (!closeRequested) 

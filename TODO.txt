@@ -10,6 +10,9 @@
 [X] Clean up use of pointer for enemy spawning
 [X] Clean up the laser hit boxes
 [X] Add in the points system
-[ ] Add the kill log
+[X] Add the kill log
+[X] Address bug where the laser's get destroyed after the alien pos gets updated
+[ ] Add the active item slot
+[ ] Add destroy for children objects
 
     
