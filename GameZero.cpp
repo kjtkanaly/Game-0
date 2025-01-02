@@ -283,7 +283,7 @@ class Scene
         mainFrame.origin = Vector2Int(8, 8);
         mainFrame.size = Vector2Int(720, 704);
 
-        mainGrid.dim = Vector2Int(8, 6);
+        mainGrid.dim = Vector2Int(8, 7);
         mainGrid.elemSize = Vector2Int(90, 90);
         mainGrid.MakeColPosArray();
         mainGrid.MakeRowPosArray();
@@ -313,7 +313,6 @@ class Scene
         }
         
         killLogList.push_back(killLogEntry);
-        cout << "Log list length: " << to_string(killLogList.size()) << endl;
     }
 };
 
@@ -566,6 +565,56 @@ class Laser : public SpriteObject {
     }
 };
 
+class StatusBar : public GameObject
+{
+    public:
+    StatusBar(
+        const Vector2Int& inPos = Vector2Int(0, 0),
+        SDL_General* SDL_GenPtr = NULL,
+        Scene* scenePtr = NULL,
+        GameObject* rootPtr = NULL)
+        : GameObject(inPos, SDL_GenPtr, scenePtr, rootPtr)
+    {
+        // Init the initial herts
+        for (int i = 0; i < initHeartCount; i++) {
+            Vector2Int pos = Vector2Int(
+                spacing.x * i + origin.x, 
+                origin.y);
+
+            cout << to_string(pos.x) << endl;
+
+            // Create the heart object
+            SpriteObject* heart = new SpriteObject(
+                pos,
+                SDL_GenPtr,
+                scenePtr,
+                rootPtr,
+                heartSpritePath);
+            heart->name = "Heart";
+            heart->w *= 3;
+            heart->h *= 3;
+            children.push_back(heart);
+
+            // Append the heart icons vector
+            heartIcons.push_back(heart);
+        }
+    }
+
+    void RemoveHeart()
+    {
+        if (children.size() == 0) return;
+
+        children[children.size() - 1]->SetDestroyQueuedVal(true);
+    }
+
+    private:
+    int initHeartCount = 3;
+    const char* heartSpritePath = "resources/heart.png";
+    const Vector2Int origin = Vector2Int(18, 659);
+    const Vector2Int spacing = Vector2Int(64, 64);
+    vector<SpriteObject*> heartIcons;
+};
+
 class Alien : public SpriteObject
 {
     public:
@@ -581,6 +630,9 @@ class Alien : public SpriteObject
 
         // Get the score value ptr
         DigForScoreValue(root);
+
+        // Get the status bar ptr
+        DigForStatusBar(root);
     }
 
     void Process(const float& deltaTime) override
@@ -711,6 +763,9 @@ class Alien : public SpriteObject
         // Update the score value
         scoreValue->UpdateValue(-1 * pointValue);
 
+        // Removed a heart from the player
+        statusBar->RemoveHeart();
+
         // Log the enemy to be destroyed
         SetDestroyQueuedVal(true);
     }
@@ -719,6 +774,7 @@ class Alien : public SpriteObject
     int health = 2;
     int pointValue = 10;
     ScoreText* scoreValue;
+    StatusBar* statusBar;
 
     void DigForScoreValue(GameObject* node)
     {
@@ -728,6 +784,16 @@ class Alien : public SpriteObject
         }
 
         if (node->name == "Overall-Score-Value") scoreValue = (ScoreText*) node;
+    }
+
+    void DigForStatusBar(GameObject* node)
+    {
+        for (int i = 0; i < node->children.size(); i++) 
+        {
+            DigForStatusBar(node->children[i]);
+        }
+
+        if (node->name == "Status-Bar") statusBar = (StatusBar*) node;
     }
 };
 
@@ -862,8 +928,6 @@ class Ship : public SpriteObject
 
         // Reset the timer clock
         timerTimeLeft = 0;  // Reset the timer
-
-        // std::cout << "Target Index: " << std::to_string(targetIndex) << std::endl;
     }
 
     float easeInOutSine(float x) 
@@ -1033,16 +1097,15 @@ int main()
     root.children.push_back(&ship);
 
     // Create the damage zone bar
-    SpriteObject damageBar = SpriteObject(
+    StatusBar statusBar = StatusBar(
         Vector2Int(
             scene.mainFrame.origin.x, 
-            scene.mainGrid.rowPos[scene.mainGrid.rowPos.size() - 1] + scene.mainGrid.elemSize.y + 8),
+            651 - 8),
         &SDL_Gen,
         &scene,
-        &root,
-        "resources/Damage-Bar.png");
-    damageBar.name = "Damage-Bar";
-    root.children.push_back(&damageBar);
+        &root);
+    statusBar.name = "Status-Bar";
+    root.children.push_back(&statusBar);
 
     // Create the enemy spawner
     EnemySpawner spawner = EnemySpawner(
@@ -1141,11 +1204,6 @@ int main()
 
         // Draw the ship to the render window
         RenderGameObjects(&root);
-        // SDL_RenderCopy(
-        //     SDL_Gen.rend, 
-        //     tex, 
-        //     &srcRect, 
-        //     &dstRect);
 
         // Swaps the render from the back buffer to the front
         SDL_RenderPresent(SDL_Gen.rend);
