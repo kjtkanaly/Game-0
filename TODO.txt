@@ -14,5 +14,15 @@
 [X] Address bug where the laser's get destroyed after the alien pos gets updated
 [ ] Add the active item slot
 [ ] Add destroy for children objects
+[X] Find ref shaders
+[ ] Learn how to incorporate shaders into the game
+[ ] Start learning how to make the shaders
+    [ ] Explosion shader
+    [ ] Stars shader
 
+
+
+Player Health system
+    - Player DOES lose Health if the aliens crash into the player or whatever
+    - Player DOES NOT lose Health if the aliens reach the other end
     
