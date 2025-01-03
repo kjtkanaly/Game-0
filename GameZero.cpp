@@ -354,6 +354,10 @@ class GameObject : public SDL_Rect
     bool GetDestroyQueuedVal() { return destroyQueued; }
     void SetDestroyQueuedVal(bool inVal) 
     { 
+        for (int i = 0; i < children.size(); i++) {
+            children[i]->SetDestroyQueuedVal(inVal);
+        }
+
         destroyQueued = inVal; 
     }
 
