@@ -10,17 +10,6 @@
 using namespace std;
 
 // -----------------------------------------------------------------------------
-// Globals
-const int gWidth = 960; 
-const int gHeight = 720;
-const int gFrameRate = 60;
-const float gFrameRateF = (float) gFrameRate;
-SDL_Window* gWindow = nullptr;
-SDL_Renderer* gRenderer = nullptr;
-SDL_GLContext* gOpenGLContext = nullptr;
-vector<SDL_Event> gEvents;
-
-// -----------------------------------------------------------------------------
 // GENERAL TOOLS
 // Useful data type
 struct Vector2
@@ -51,12 +40,6 @@ struct Vector2Int
     }
 };
 
-struct Frame
-{
-    Vector2Int origin;
-    Vector2Int size;
-};
-
 struct Grid
 {
     Vector2Int origin;
@@ -65,15 +48,26 @@ struct Grid
     std::vector<int> colPos;
     std::vector<int> rowPos;
 
+    Grid(
+        const Vector2Int& inOrigin,
+        const Vector2Int& inDim,
+        const Vector2Int& inElemSize)
+    {
+        origin = inOrigin;
+        dim = inDim;
+        elemSize = inElemSize;
+
+        MakeColPosArray();
+        MakeRowPosArray();
+    }
+
+    private:
     void MakeColPosArray()
     {
         // Make the col pos array
         for (int i = 0; i < dim.x; i++) 
         {
             colPos.push_back(i * elemSize.x + origin.x);
-            // std::cout << "Col Element: " 
-            //         << std::to_string(i * elemSize.x + origin.x)
-            //         << std::endl;
         }
     }
 
@@ -83,12 +77,22 @@ struct Grid
         for (int i = 0; i < dim.y; i++) 
         {
             rowPos.push_back(i * elemSize.y + origin.y);
-            // std::cout << "Row Element: " 
-            //         << std::to_string(i * elemSize.y + origin.y)
-            //         << std::endl;
         }
     }
 };
+
+// -----------------------------------------------------------------------------
+// Globals
+const int gWidth = 960; 
+const int gHeight = 720;
+const int gFrameRate = 60;
+const float gFrameRateF = (float) gFrameRate;
+SDL_Window* gWindow = nullptr;
+SDL_Renderer* gRenderer = nullptr;
+SDL_GLContext* gOpenGLContext = nullptr;
+vector<SDL_Event> gEvents;
+Grid* gMainGrid = nullptr;
+Grid* gKillLogGrid = nullptr;
 
 // -----------------------------------------------------------------------------
 // Framework methods
@@ -261,54 +265,6 @@ void QuitSDLEnviroment()
 
 // -----------------------------------------------------------------------------
 // Objects
-
-class Scene
-{
-    public:
-    Frame mainFrame;
-    Frame killLogFrame;
-    Grid mainGrid;
-    Grid killLogGrid;
-    std::vector<std::vector<SDL_Rect*>> killLogList;
-
-    Scene()
-    {
-        mainFrame.origin = Vector2Int(8, 8);
-        mainFrame.size = Vector2Int(720, 704);
-
-        mainGrid.dim = Vector2Int(8, 7);
-        mainGrid.elemSize = Vector2Int(90, 90);
-        mainGrid.MakeColPosArray();
-        mainGrid.MakeRowPosArray();
-
-        killLogFrame.origin = Vector2Int(750, 16);
-        killLogFrame.size = Vector2Int(208, 489);
-
-        killLogGrid.origin = killLogFrame.origin;
-        killLogGrid.dim = Vector2Int(1, 10);
-        killLogGrid.elemSize = Vector2Int(195, 48);
-        killLogGrid.MakeColPosArray();
-        killLogGrid.MakeRowPosArray();
-    }
-
-    void AppendKillLog(SDL_Rect* logName, SDL_Rect* logValue)
-    {
-        // Kill Log entry
-        std::vector<SDL_Rect*> killLogEntry;
-        killLogEntry.push_back(logValue);
-        killLogEntry.push_back(logName);
-
-        // for (int i = 0; i < killLogList.size(); i++)
-        for (int i = killLogList.size() - 1; i >= 0; i--)
-        {
-            killLogList[i][0]->y -= killLogGrid.elemSize.y;
-            killLogList[i][1]->y -= killLogGrid.elemSize.y;
-        }
-        
-        killLogList.push_back(killLogEntry);
-    }
-};
-
 class GameObject : public SDL_Rect
 {
     public:
@@ -324,21 +280,16 @@ class GameObject : public SDL_Rect
     std::string name;
     Type type = Type::DEFAULT;
     SDL_Texture* tex;
-    Scene* scene;
     GameObject* root;
     std::vector<GameObject*> children;
 
     GameObject(const Vector2Int& inPos = Vector2Int(0, 0),
-               Scene* scenePtr = NULL,
                GameObject* rootPtr = NULL) :
         children()
     {
         // Set the position of the game object
         x = inPos.x;
         y = inPos.y;
-
-        // Set the pointer to the scene object
-        scene = scenePtr;
 
         // Set the root pointer
         root = rootPtr;
@@ -363,6 +314,19 @@ class GameObject : public SDL_Rect
 
     protected: 
     bool destroyQueued = false;
+
+    GameObject* GetNodeByName(GameObject* node, string inName)
+    {
+        if (node->name == inName) return node; 
+
+        for (int i = 0; i < node->children.size(); i++)
+        {
+            GameObject* output = GetNodeByName(node->children[i], inName);
+            if (output) return output;
+        }
+
+        return nullptr;
+    }
 };
 
 class TextObject : public GameObject
@@ -381,14 +345,13 @@ class TextObject : public GameObject
     Vector2Int pos;
 
     TextObject(const Vector2Int& inPos = Vector2Int(0, 0),
-          Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
           const char* message = NULL,
           const char* fontFile = NULL,
           int size = 24,
           SDL_Color inColor = SDL_Color(),
           HorzAlign inHorzAlign = HorzAlign::LEFT)
-        : GameObject(inPos, scenePtr, rootPtr)
+        : GameObject(inPos, rootPtr)
     {
         // If no message passed in
         if (message == NULL) cerr << "No message given for text object!" << endl;
@@ -446,14 +409,13 @@ class ScoreText : public TextObject
     int value = 0;
 
     ScoreText(const Vector2Int& inPos = Vector2Int(0, 0),
-          Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
           const char* message = NULL,
           const char* fontFile = NULL,
           int size = 24,
           SDL_Color color = SDL_Color(),
           HorzAlign inHorzAlign = HorzAlign::LEFT)
-        : TextObject(inPos, scenePtr, rootPtr, message, fontFile, size, color, inHorzAlign)
+        : TextObject(inPos, rootPtr, message, fontFile, size, color, inHorzAlign)
     {}
 
     void UpdateValue(const int& inValue)
@@ -477,14 +439,42 @@ class ScoreText : public TextObject
     private:
 };
 
+class KillLog : public GameObject
+{
+    public:
+    std::vector<std::vector<SDL_Rect*>> killLogList;
+
+    KillLog(const Vector2Int& inPos = Vector2Int(0, 0),
+          GameObject* rootPtr = NULL)
+        : GameObject(inPos, rootPtr)
+    {
+    }
+
+    void AppendKillLog(SDL_Rect* logName, SDL_Rect* logValue)
+    {
+        // Kill Log entry
+        std::vector<SDL_Rect*> killLogEntry;
+        killLogEntry.push_back(logValue);
+        killLogEntry.push_back(logName);
+
+        // for (int i = 0; i < killLogList.size(); i++)
+        for (int i = killLogList.size() - 1; i >= 0; i--)
+        {
+            killLogList[i][0]->y -= gKillLogGrid->elemSize.y;
+            killLogList[i][1]->y -= gKillLogGrid->elemSize.y;
+        }
+        
+        killLogList.push_back(killLogEntry);
+    }
+};
+
 class SpriteObject : public GameObject
 {
     public:
     SpriteObject(const Vector2Int& inPos = Vector2Int(0, 0),
-          Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
           const char* spriteFile = NULL)
-        : GameObject(inPos, scenePtr, rootPtr)
+        : GameObject(inPos, rootPtr)
     {
         // Set the game object's sprite
         if (spriteFile != NULL) {
@@ -502,10 +492,9 @@ class SpriteObject : public GameObject
 class Laser : public SpriteObject {
     public:
     Laser(const Vector2Int& inPos = Vector2Int(0, 0),
-          Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
           const char* spriteFile = NULL)
-        : SpriteObject(inPos, scenePtr, rootPtr, spriteFile)
+        : SpriteObject(inPos, rootPtr, spriteFile)
     {
         pos.x = (float) x;
         pos.y = (float) y;
@@ -556,9 +545,8 @@ class StatusBar : public GameObject
     public:
     StatusBar(
         const Vector2Int& inPos = Vector2Int(0, 0),
-        Scene* scenePtr = NULL,
         GameObject* rootPtr = NULL)
-        : GameObject(inPos, scenePtr, rootPtr)
+        : GameObject(inPos, rootPtr)
     {
         // Init the initial herts
         for (int i = 0; i < initHeartCount; i++) {
@@ -571,7 +559,6 @@ class StatusBar : public GameObject
             // Create the heart object
             SpriteObject* heart = new SpriteObject(
                 pos,
-                scenePtr,
                 rootPtr,
                 heartSpritePath);
             heart->name = "Heart";
@@ -603,19 +590,24 @@ class Alien : public SpriteObject
 {
     public:
     Alien(const Vector2Int& inPos = Vector2Int(0, 0),
-          Scene* scenePtr = NULL,
           GameObject* rootPtr = NULL,
           const char* spriteFile = NULL)
-        : SpriteObject(inPos, scenePtr, rootPtr, spriteFile)
+        : SpriteObject(inPos, rootPtr, spriteFile)
     {
         // Set the game object type
         type = Type::ENEMY;
 
         // Get the score value ptr
-        DigForScoreValue(root);
+        scoreValue = (ScoreText*) GetNodeByName(root, "Overall-Score-Value");
+        if (!scoreValue) cerr << "No Overall Score Value object found";
 
         // Get the status bar ptr
-        DigForStatusBar(root);
+        statusBar = (StatusBar*) GetNodeByName(root, "Status-Bar");
+        if (!statusBar) cerr << "No Status Bar object found";
+
+        // Get the kill log object
+        killLog = (KillLog*) GetNodeByName(root, "Kill-Log");
+        if (!killLog) cerr << "No Kill Log object found";
     }
 
     void Process(const float& deltaTime) override
@@ -632,9 +624,8 @@ class Alien : public SpriteObject
 
             TextObject* logName = new TextObject(
                 Vector2Int(
-                    scene->killLogGrid.colPos[0], 
-                    scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
-                scene,
+                    gKillLogGrid->colPos[0], 
+                    gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
                 root,
                 name.c_str(),
                 "resources/Born2bSportyV2.ttf",
@@ -647,9 +638,8 @@ class Alien : public SpriteObject
 
             TextObject* logValue = new TextObject(
                 Vector2Int(
-                    scene->killLogGrid.origin.x + scene->killLogGrid.elemSize.x, 
-                    scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
-                scene,
+                    gKillLogGrid->origin.x + gKillLogGrid->elemSize.x, 
+                    gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
                 root,
                 (valMod + to_string(pointValue)).c_str(),
                 "resources/Born2bSportyV2.ttf",
@@ -659,13 +649,13 @@ class Alien : public SpriteObject
             logValue->name = "Kill-Log-Value";
             root->children.push_back(logValue);
 
-            scene->AppendKillLog(logName, logValue);
+            killLog->AppendKillLog(logName, logValue);
 
-            if (scene->killLogList.size() > scene->killLogGrid.dim.y)
+            if (killLog->killLogList.size() > gKillLogGrid->dim.y)
             {
-                ((GameObject*) scene->killLogList[0][0])->SetDestroyQueuedVal(true);
-                ((GameObject*) scene->killLogList[0][1])->SetDestroyQueuedVal(true);
-                scene->killLogList.erase(scene->killLogList.begin(), scene->killLogList.begin()+1);
+                ((GameObject*) killLog->killLogList[0][0])->SetDestroyQueuedVal(true);
+                ((GameObject*) killLog->killLogList[0][1])->SetDestroyQueuedVal(true);
+                killLog->killLogList.erase(killLog->killLogList.begin(), killLog->killLogList.begin()+1);
             }
 
             // Update the score value
@@ -703,9 +693,8 @@ class Alien : public SpriteObject
 
         TextObject* logName = new TextObject(
             Vector2Int(
-                scene->killLogGrid.colPos[0], 
-                scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
-            scene,
+                gKillLogGrid->colPos[0], 
+                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
             root,
             name.c_str(),
             "resources/Born2bSportyV2.ttf",
@@ -718,9 +707,8 @@ class Alien : public SpriteObject
 
         TextObject* logValue = new TextObject(
             Vector2Int(
-                scene->killLogGrid.origin.x + scene->killLogGrid.elemSize.x, 
-                scene->killLogGrid.rowPos[scene->killLogGrid.rowPos.size() - 1]),
-            scene,
+                gKillLogGrid->origin.x + gKillLogGrid->elemSize.x, 
+                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
             root,
             (valMod + to_string(pointValue)).c_str(),
             "resources/Born2bSportyV2.ttf",
@@ -730,13 +718,13 @@ class Alien : public SpriteObject
         logValue->name = "Kill-Log-Value";
         root->children.push_back(logValue);
 
-        scene->AppendKillLog(logName, logValue);
+        killLog->AppendKillLog(logName, logValue);
 
-        if (scene->killLogList.size() > scene->killLogGrid.dim.y)
+        if (killLog->killLogList.size() > gKillLogGrid->dim.y)
         {
-            ((GameObject*) scene->killLogList[0][0])->SetDestroyQueuedVal(true);
-            ((GameObject*) scene->killLogList[0][1])->SetDestroyQueuedVal(true);
-            scene->killLogList.erase(scene->killLogList.begin(), scene->killLogList.begin()+1);
+            ((GameObject*) killLog->killLogList[0][0])->SetDestroyQueuedVal(true);
+            ((GameObject*) killLog->killLogList[0][1])->SetDestroyQueuedVal(true);
+            killLog->killLogList.erase(killLog->killLogList.begin(), killLog->killLogList.begin()+1);
         }
 
         // Update the score value
@@ -754,35 +742,15 @@ class Alien : public SpriteObject
     int pointValue = 10;
     ScoreText* scoreValue;
     StatusBar* statusBar;
-
-    void DigForScoreValue(GameObject* node)
-    {
-        for (int i = 0; i < node->children.size(); i++) 
-        {
-            DigForScoreValue(node->children[i]);
-        }
-
-        if (node->name == "Overall-Score-Value") scoreValue = (ScoreText*) node;
-    }
-
-    void DigForStatusBar(GameObject* node)
-    {
-        for (int i = 0; i < node->children.size(); i++) 
-        {
-            DigForStatusBar(node->children[i]);
-        }
-
-        if (node->name == "Status-Bar") statusBar = (StatusBar*) node;
-    }
+    KillLog* killLog;
 };
 
 class EnemySpawner : public GameObject
 {
     public:
     EnemySpawner(const Vector2Int& inPos = Vector2Int(0, 0),
-                 Scene* scenePtr = NULL,
                  GameObject* rootPtr = NULL)
-        : GameObject(inPos, scenePtr, rootPtr)
+        : GameObject(inPos, rootPtr)
     {}
 
     void Process(const float& deltaTime) override
@@ -794,10 +762,9 @@ class EnemySpawner : public GameObject
         IncrementRowPosOfEnemies(root);
 
         // Spawn a new enemy in a random col
-        int col = 0 + ( std::rand() % ( scene->mainGrid.dim.x - 0) );
+        int col = 0 + ( std::rand() % ( gMainGrid->dim.x - 0) );
         Alien* alien = new Alien(
-            Vector2Int(scene->mainGrid.colPos[col], scene->mainGrid.rowPos[0]),
-            scene,
+            Vector2Int(gMainGrid->colPos[col], gMainGrid->rowPos[0]),
             root,
             "resources/enemy-01.png");
         alien->name = "Alien";
@@ -824,15 +791,15 @@ class EnemySpawner : public GameObject
         if (node->type != GameObject::Type::ENEMY) return;
 
         // Update the alien's world pos in accordance with cord
-        node->y += scene->mainGrid.elemSize.y;
+        node->y += gMainGrid->elemSize.y;
 
         // Cast the game object pointer to an alien pointer
         Alien* alien = (Alien*) node;
 
         // Check if the alien has reached the player's level
         int didDamageLevel = 
-            scene->mainGrid.rowPos[scene->mainGrid.rowPos.size() - 1] 
-            + scene->mainGrid.elemSize.y;
+            gMainGrid->rowPos[gMainGrid->rowPos.size() - 1] 
+            + gMainGrid->elemSize.y;
         if (node->y >= didDamageLevel) alien->DamagePlayer();
 
         // Check if they should be taking damage in it's new position
@@ -844,10 +811,9 @@ class Ship : public SpriteObject
 {
     public:
     Ship(const Vector2Int& inPos = Vector2Int(0, 0),
-         Scene* scenePtr = NULL,
          GameObject* rootPtr = NULL,
          const char* spriteFile = NULL)
-        : SpriteObject(inPos, scenePtr, rootPtr, spriteFile)
+        : SpriteObject(inPos, rootPtr, spriteFile)
     {
         float startPos = (float) x;
         float targetPos = startPos;
@@ -895,11 +861,11 @@ class Ship : public SpriteObject
 
         // Check for bounds
         if (targetIndex + increment < 0) return;
-        if (targetIndex + increment >= (int) scene->mainGrid.colPos.size()) return;
+        if (targetIndex + increment >= (int) gMainGrid->colPos.size()) return;
 
         // Set the target and start positions
         targetIndex += increment;
-        targetPos = (float) scene->mainGrid.colPos[targetIndex];
+        targetPos = (float) gMainGrid->colPos[targetIndex];
         startPos = (float) x;
 
         // Reset the timer clock
@@ -953,7 +919,6 @@ class Ship : public SpriteObject
         // Spawn a laser bolt
         Laser* laser = new Laser(
             Vector2Int(x + w / 2, y),
-            scene,
             root,
             "resources/laser-01.png");
         laser->name = "laser";
@@ -972,19 +937,16 @@ class Ship : public SpriteObject
 
 // -----------------------------------------------------------------------------
 // Engine Methods
-GameObject* InitObjects(Scene* scene)
+GameObject* InitObjects()
 {
-    // Create the scene tree list
     GameObject* root = new GameObject(
         Vector2Int(0, 0),
-        scene,
         NULL);
     root->name = "Root";
 
     // Create the Background object
     SpriteObject* background = new SpriteObject(
         Vector2Int(0, 0),
-        scene,
         root,
         "resources/main-game-bckg.png");
     background->name = "Background";
@@ -993,9 +955,8 @@ GameObject* InitObjects(Scene* scene)
     // Create the ship object
     Ship* ship = new Ship(
         Vector2Int(
-            scene->mainGrid.colPos[3], 
-            scene->mainGrid.rowPos[scene->mainGrid.rowPos.size() - 1]),
-        scene,
+            gMainGrid->colPos[3], 
+            gMainGrid->rowPos[gMainGrid->rowPos.size() - 1]),
         root,
         "resources/ship-01.png");
     ship->name = "Ship";
@@ -1006,9 +967,8 @@ GameObject* InitObjects(Scene* scene)
     // Create the damage zone bar
     StatusBar* statusBar = new StatusBar(
         Vector2Int(
-            scene->mainFrame.origin.x, 
+            gMainGrid->origin.x, 
             651 - 8),
-        scene,
         root);
     statusBar->name = "Status-Bar";
     root->children.push_back(statusBar);
@@ -1016,7 +976,6 @@ GameObject* InitObjects(Scene* scene)
     // Create the enemy spawner
     EnemySpawner* spawner = new EnemySpawner(
         Vector2Int(0, 0),
-        scene,
         root);
     spawner->name = "Enemy-Spawner";
     root->children.push_back(spawner);
@@ -1028,7 +987,6 @@ GameObject* InitObjects(Scene* scene)
     const char* fontFile = "resources/Born2bSportyV2.ttf";
     TextObject* scoreText = new TextObject(
         Vector2Int(751, 505),
-        scene,
         root,
         "Score:",
         fontFile,
@@ -1040,7 +998,6 @@ GameObject* InitObjects(Scene* scene)
     // Create the score value
     ScoreText* scoreValue = new ScoreText(
         Vector2Int(945, 505),
-        scene,
         root,
         "999",
         fontFile,
@@ -1051,10 +1008,16 @@ GameObject* InitObjects(Scene* scene)
     root->children.push_back(scoreValue);
     scoreValue->UpdateValue(0);
 
+    // Kill log object
+    KillLog* killLog = new KillLog(
+        Vector2Int(0, 0),
+        root);
+    killLog->name = "Kill-Log";
+    root->children.push_back(killLog);
+
     // Create the active item text
     TextObject* activeItemText = new TextObject(
         Vector2Int(783, 555),
-        scene,
         root,
         "Active Item",
         fontFile,
@@ -1066,7 +1029,6 @@ GameObject* InitObjects(Scene* scene)
     // Create the active tiem slot
     SpriteObject* activeItemSlot = new SpriteObject(
         Vector2Int(803, 598),
-        scene,
         root,
         "resources/active-item-slot.png");
     activeItemSlot->name = "Active-Item-Slot";
@@ -1103,7 +1065,7 @@ void ProcessObjectTree(GameObject* node, float delta)
     node->Process(delta);
 }
 
-// Step through the scene tree and destroy any marked objects
+// Step through the root tree and destroy any marked objects
 void DestoryQueuedObjects(GameObject* node)
 {
     // Dig down the node's children
@@ -1135,10 +1097,17 @@ int main()
     // Create the renderer for the game window
     CreateRenderer(SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
-    // Create the Scene Object
-    Scene scene = Scene();
+    gMainGrid = new Grid(
+        Vector2Int(8, 8),
+        Vector2Int(8, 7),
+        Vector2Int(90, 90));
 
-    GameObject* root = InitObjects(&scene);
+    gKillLogGrid = new Grid(
+        Vector2Int(750, 16),
+        Vector2Int(1, 10),
+        Vector2Int(195, 48));
+
+    GameObject* root = InitObjects();
     
     // Set to 1 when close window button pressed
     int closeRequested = 0;
