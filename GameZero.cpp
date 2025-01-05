@@ -442,22 +442,46 @@ class ScoreText : public TextObject
 class KillLog : public GameObject
 {
     public:
-    std::vector<std::vector<SDL_Rect*>> killLogList;
-
     KillLog(const Vector2Int& inPos = Vector2Int(0, 0),
           GameObject* rootPtr = NULL)
         : GameObject(inPos, rootPtr)
-    {
-    }
+    {}
 
-    void AppendKillLog(SDL_Rect* logName, SDL_Rect* logValue)
+    void CreateKillLogEntry(
+        const char* name,
+        const char* pointChar,
+        SDL_Color color)
     {
+        TextObject* logName = new TextObject(
+            Vector2Int(
+                gKillLogGrid->colPos[0], 
+                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
+            root,
+            name,
+            "resources/Born2bSportyV2.ttf",
+            32,
+            color);
+        logName->name = "Kill-Log-Name";
+        children.push_back(logName);
+
+        TextObject* logValue = new TextObject(
+            Vector2Int(
+                gKillLogGrid->origin.x + gKillLogGrid->elemSize.x, 
+                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
+            root,
+            pointChar,
+            "resources/Born2bSportyV2.ttf",
+            32,
+            color,
+            TextObject::HorzAlign::RIGHT);
+        logValue->name = "Kill-Log-Value";
+        children.push_back(logValue);
+
         // Kill Log entry
         std::vector<SDL_Rect*> killLogEntry;
         killLogEntry.push_back(logValue);
         killLogEntry.push_back(logName);
 
-        // for (int i = 0; i < killLogList.size(); i++)
         for (int i = killLogList.size() - 1; i >= 0; i--)
         {
             killLogList[i][0]->y -= gKillLogGrid->elemSize.y;
@@ -465,7 +489,17 @@ class KillLog : public GameObject
         }
         
         killLogList.push_back(killLogEntry);
+
+        if (killLogList.size() > gKillLogGrid->dim.y)
+        {
+            ((GameObject*) killLogList[0][0])->SetDestroyQueuedVal(true);
+            ((GameObject*) killLogList[0][1])->SetDestroyQueuedVal(true);
+            killLogList.erase(killLogList.begin(), killLogList.begin()+1);
+        }
     }
+
+    private:
+    std::vector<std::vector<SDL_Rect*>> killLogList;
 };
 
 class SpriteObject : public GameObject
@@ -618,45 +652,13 @@ class Alien : public SpriteObject
         // Check if the alien is dead
         if (health <= 0) 
         {
-            // Update the hill log
+            // Update the kill log
             // SDL_Color color = {255, 100, 60, 255};
             SDL_Color color = {100, 255, 150, 255};
-
-            TextObject* logName = new TextObject(
-                Vector2Int(
-                    gKillLogGrid->colPos[0], 
-                    gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
-                root,
-                name.c_str(),
-                "resources/Born2bSportyV2.ttf",
-                32,
+            killLog->CreateKillLogEntry(
+                name.c_str(), 
+                ("+" + to_string(pointValue)).c_str(), 
                 color);
-            logName->name = "Kill-Log-Name";
-            root->children.push_back(logName);
-
-            std::string valMod = "+";
-
-            TextObject* logValue = new TextObject(
-                Vector2Int(
-                    gKillLogGrid->origin.x + gKillLogGrid->elemSize.x, 
-                    gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
-                root,
-                (valMod + to_string(pointValue)).c_str(),
-                "resources/Born2bSportyV2.ttf",
-                32,
-                color,
-                TextObject::HorzAlign::RIGHT);
-            logValue->name = "Kill-Log-Value";
-            root->children.push_back(logValue);
-
-            killLog->AppendKillLog(logName, logValue);
-
-            if (killLog->killLogList.size() > gKillLogGrid->dim.y)
-            {
-                ((GameObject*) killLog->killLogList[0][0])->SetDestroyQueuedVal(true);
-                ((GameObject*) killLog->killLogList[0][1])->SetDestroyQueuedVal(true);
-                killLog->killLogList.erase(killLog->killLogList.begin(), killLog->killLogList.begin()+1);
-            }
 
             // Update the score value
             scoreValue->UpdateValue(pointValue);
@@ -688,44 +690,12 @@ class Alien : public SpriteObject
 
     void DamagePlayer()
     {
-        // Update the hill log
+        // Update the kill log
         SDL_Color color = {255, 100, 60, 255};
-
-        TextObject* logName = new TextObject(
-            Vector2Int(
-                gKillLogGrid->colPos[0], 
-                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
-            root,
-            name.c_str(),
-            "resources/Born2bSportyV2.ttf",
-            32,
+        killLog->CreateKillLogEntry(
+            name.c_str(), 
+            ("-" + to_string(pointValue)).c_str(), 
             color);
-        logName->name = "Kill-Log-Name";
-        root->children.push_back(logName);
-
-        std::string valMod = "-";
-
-        TextObject* logValue = new TextObject(
-            Vector2Int(
-                gKillLogGrid->origin.x + gKillLogGrid->elemSize.x, 
-                gKillLogGrid->rowPos[gKillLogGrid->rowPos.size() - 1]),
-            root,
-            (valMod + to_string(pointValue)).c_str(),
-            "resources/Born2bSportyV2.ttf",
-            32,
-            color,
-            TextObject::HorzAlign::RIGHT);
-        logValue->name = "Kill-Log-Value";
-        root->children.push_back(logValue);
-
-        killLog->AppendKillLog(logName, logValue);
-
-        if (killLog->killLogList.size() > gKillLogGrid->dim.y)
-        {
-            ((GameObject*) killLog->killLogList[0][0])->SetDestroyQueuedVal(true);
-            ((GameObject*) killLog->killLogList[0][1])->SetDestroyQueuedVal(true);
-            killLog->killLogList.erase(killLog->killLogList.begin(), killLog->killLogList.begin()+1);
-        }
 
         // Update the score value
         scoreValue->UpdateValue(-1 * pointValue);
