@@ -314,6 +314,7 @@ class GameObject : public SDL_Rect
 
     protected: 
     bool destroyQueued = false;
+    const float pi = (float) M_PI;
 
     GameObject* GetNodeByName(GameObject* node, string inName)
     {
@@ -326,6 +327,32 @@ class GameObject : public SDL_Rect
         }
 
         return nullptr;
+    }
+
+    float easeInOutSine(float x) 
+    {
+        return -(cos(pi * x) - 1) / 2;
+    }
+
+    float easeOutElastic(float x) 
+    {
+        const double c4 = (2 * M_PI) / 3;
+
+        if (x == 0) {
+            return 0;
+        } else if (x == 1) {
+            return 1;
+        } else {
+            return pow(2, -10 * x) * sin((x * 10 - 0.75) * c4) + 1;
+        }
+    }
+
+    float easeOutBack(float x)
+    {
+        const float c1 = 1.70158;
+        const float c3 = c1 + 1;
+
+        return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2);
     }
 };
 
@@ -642,12 +669,22 @@ class Alien : public SpriteObject
         // Get the kill log object
         killLog = (KillLog*) GetNodeByName(root, "Kill-Log");
         if (!killLog) cerr << "No Kill Log object found";
+
+        startPos = (float) y;
+        targetPos = startPos;
+
+        timerTimeLeft = timerTotalTime;
     }
 
     void Process(const float& deltaTime) override
     {
         // Check if the alien is being hit by a projectile
         if (IsHit(root)) TakeDamage();
+
+        int didDamageLevel = 
+            gMainGrid->rowPos[gMainGrid->rowPos.size() - 1] 
+            + gMainGrid->elemSize.y;
+        if (targetPos >= didDamageLevel) DamagePlayer();
 
         // Check if the alien is dead
         if (health <= 0) 
@@ -666,6 +703,8 @@ class Alien : public SpriteObject
             // Queue destruction
             SetDestroyQueuedVal(true);
         }
+
+        NewTranslateToPos(deltaTime);
     }
 
     bool IsHit(GameObject* node)
@@ -707,12 +746,44 @@ class Alien : public SpriteObject
         SetDestroyQueuedVal(true);
     }
 
+    void UpdateTargetPos(int increment) 
+    {
+        // Check if the target is still translating
+        // if (timerTimeLeft < timerTotalTime) return;
+
+        // Set the target and start positions
+        targetPos += (float) gMainGrid->elemSize.y;
+        startPos = (float) y;
+
+        // Reset the timer clock
+        timerTimeLeft = 0;  // Reset the timer
+    }
+
     private:
     int health = 2;
+    int targetIndex = 0;
     int pointValue = 10;
+    float timerTimeLeft = 0;
+    float timerTotalTime = 0.2;
+    float startPos;
+    float targetPos;
     ScoreText* scoreValue;
     StatusBar* statusBar;
     KillLog* killLog;
+
+    void NewTranslateToPos(float deltaTime)
+    {
+        timerTimeLeft += deltaTime;
+
+        if (timerTimeLeft >= timerTotalTime) return;
+
+        float ease = easeOutBack(timerTimeLeft / timerTotalTime);
+        float newPos = (targetPos - startPos) * ease + startPos;
+
+        // std::cout << "Ease: " << std::to_string(newPos) << std::endl;
+
+        y = (int) newPos;
+    }
 };
 
 class EnemySpawner : public GameObject
@@ -761,16 +832,12 @@ class EnemySpawner : public GameObject
         if (node->type != GameObject::Type::ENEMY) return;
 
         // Update the alien's world pos in accordance with cord
-        node->y += gMainGrid->elemSize.y;
+        // node->y += gMainGrid->elemSize.y;
 
         // Cast the game object pointer to an alien pointer
         Alien* alien = (Alien*) node;
 
-        // Check if the alien has reached the player's level
-        int didDamageLevel = 
-            gMainGrid->rowPos[gMainGrid->rowPos.size() - 1] 
-            + gMainGrid->elemSize.y;
-        if (node->y >= didDamageLevel) alien->DamagePlayer();
+        alien->UpdateTargetPos(1);
 
         // Check if they should be taking damage in it's new position
         if (alien->IsHit(root)) alien->TakeDamage();
@@ -785,16 +852,14 @@ class Ship : public SpriteObject
          const char* spriteFile = NULL)
         : SpriteObject(inPos, rootPtr, spriteFile)
     {
-        float startPos = (float) x;
-        float targetPos = startPos;
+        startPos = (float) x;
+        targetPos = startPos;
 
         timerTimeLeft = timerTotalTime;
     }
 
     void Process(const float& deltaTime) override
     {
-        // Grid movement
-
         // Check for the user input
         SDL_Event event;
         for (int i = 0; i < gEvents.size(); i++) 
@@ -827,11 +892,11 @@ class Ship : public SpriteObject
     void UpdateTargetPos(int increment) 
     {
         // Check if the target is still translating
-        if (timerTimeLeft < timerTotalTime) return;
+        // if (timerTimeLeft < timerTotalTime) return;
 
         // Check for bounds
         if (targetIndex + increment < 0) return;
-        if (targetIndex + increment >= (int) gMainGrid->colPos.size()) return;
+        if (targetIndex + increment >= gMainGrid->dim.x) return;
 
         // Set the target and start positions
         targetIndex += increment;
@@ -840,34 +905,6 @@ class Ship : public SpriteObject
 
         // Reset the timer clock
         timerTimeLeft = 0;  // Reset the timer
-    }
-
-    float easeInOutSine(float x) 
-    {
-        float pi = 3.14;
-        return -(cos(pi * x) - 1) / 2;
-    }
-
-    float easeOutElastic(float x) 
-    {
-        const float pi = 3.14;
-        const double c4 = (2 * M_PI) / 3;
-
-        if (x == 0) {
-            return 0;
-        } else if (x == 1) {
-            return 1;
-        } else {
-            return pow(2, -10 * x) * sin((x * 10 - 0.75) * c4) + 1;
-        }
-    }
-
-    float easeOutBack(float x)
-    {
-        const float c1 = 1.70158;
-        const float c3 = c1 + 1;
-
-        return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2);
     }
 
     void NewTranslateToPos(float deltaTime)

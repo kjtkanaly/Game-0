@@ -6,6 +6,8 @@
 [X] Get enemy spawning working
 [X] Get enemy death working
 [ ] Get enemy hit animations working
+    [ ] Get sprite animations working
+        - https://lazyfoo.net/tutorials/SDL/14_animated_sprites_and_vsync/index.php
 [X] Despawn bullets after they hit
 [X] Clean up use of pointer for enemy spawning
 [X] Clean up the laser hit boxes
@@ -13,7 +15,7 @@
 [X] Add the kill log
 [X] Address bug where the laser's get destroyed after the alien pos gets updated
 [ ] Add the active item slot
-[ ] Add destroy for children objects
+[X] Add destroy for children objects
 [X] Find ref shaders
 [ ] Learn how to incorporate shaders into the game
 [ ] Start learning how to make the shaders
